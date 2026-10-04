@@ -22,6 +22,7 @@
     "@wagmi/core": "^2.22.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "d3-geo": "^3.1.1",
     "genlayer-js": "^1.1.8",
     "lucide-react": "^0.548.0",
     "next": "^16.0.0",
@@ -29,14 +30,19 @@
     "react-dom": "^19.2.0",
     "sonner": "^1.7.1",
     "tailwind-merge": "^3.3.1",
+    "topojson-client": "^3.1.0",
     "viem": "2.21.54",
-    "wagmi": "^2.19.2"
+    "wagmi": "^2.19.2",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.16",
+    "@types/d3-geo": "^3.1.1",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^24.9.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/topojson-client": "^3.1.5",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.16",

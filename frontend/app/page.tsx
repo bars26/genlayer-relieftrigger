@@ -6,6 +6,8 @@ import { StatsPanel } from "@/components/StatsPanel";
 import { RecentEvents } from "@/components/RecentEvents";
 import { PaidLookup } from "@/components/PaidLookup";
 import { TransactionPanel } from "@/components/TransactionPanel";
+import { EventMap } from "@/components/EventMap";
+import { Coins, Radio, Send, ShieldCheck } from "lucide-react";
 
 export default function HomePage() {
   return (
@@ -13,13 +15,35 @@ export default function HomePage() {
       <Navbar />
       <main className="flex-grow pt-20 pb-12 px-4 md:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">ReliefTrigger</h1>
-            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
-              Relief money arrives weeks after a disaster because someone has to decide it happened. ReliefTrigger lets donors decide
-              that in advance: they pre-fund a responder and write the trigger. When a GDACS alert matches, GenLayer validators confirm
-              it against GDACS and USGS themselves and the payout goes straight to the responder&apos;s wallet.
-            </p>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center mb-8">
+            <div className="lg:col-span-5 space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-accent">Anticipatory disaster relief on GenLayer</p>
+              <h1 className="text-3xl md:text-4xl xl:text-5xl font-bold leading-tight">Fund before the disaster. Pay when it is confirmed.</h1>
+              <p className="text-base md:text-lg text-muted-foreground">
+                Relief money arrives weeks late because someone has to decide the disaster happened. Here donors decide in advance: they
+                pre-fund a responder and write the trigger. When a GDACS alert matches, GenLayer validators confirm it against GDACS and
+                USGS themselves and the payout goes straight to the responder&apos;s wallet.
+              </p>
+              <ol className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { icon: Coins, t: "1. Fund", d: "terms fixed up front" },
+                  { icon: Radio, t: "2. Alert", d: "GDACS reports an event" },
+                  { icon: ShieldCheck, t: "3. Verify", d: "GDACS + USGS, in code" },
+                  { icon: Send, t: "4. Pay", d: "straight to the wallet" },
+                ].map(({ icon: Icon, t, d }) => (
+                  <li key={t} className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                    <Icon className="w-4 h-4 text-accent shrink-0" />
+                    <span>
+                      <strong className="block text-foreground">{t}</strong>
+                      <span className="text-muted-foreground">{d}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div className="lg:col-span-7">
+              <EventMap />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">

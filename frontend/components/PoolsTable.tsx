@@ -22,6 +22,7 @@ import { Input } from "./ui/input";
 import { StateBadge, VerdictBadge } from "./Badges";
 import { PoolActions } from "./PoolActions";
 import { AddressDisplay } from "./AddressDisplay";
+import { HazardIcon } from "./HazardIcon";
 
 const STATES: (PoolState | "any")[] = ["any", "open", "pending", "closed"];
 
@@ -176,7 +177,14 @@ function PoolRow({ pool }: { pool: Pool }) {
           </button>
         </td>
         <td className="px-3 py-4 text-xs">
-          <span className="block">{pool.hazards.split(",").map((h) => HAZARD_LABEL[h] ?? h).join(", ")}</span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {pool.hazards.split(",").map((h) => (
+              <span key={h} className="inline-flex items-center gap-1">
+                <HazardIcon code={h} className="w-3.5 h-3.5 text-accent" />
+                {HAZARD_LABEL[h] ?? h}
+              </span>
+            ))}
+          </span>
           <span className="block text-muted-foreground mt-1">{pool.countries.replaceAll(",", ", ")} · <span className={ALERT_STYLE[pool.min_alert]}>{pool.min_alert.toLowerCase()}+</span></span>
         </td>
         <td className="px-3 py-4 text-sm font-mono whitespace-nowrap">

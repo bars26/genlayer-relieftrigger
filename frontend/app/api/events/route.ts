@@ -20,10 +20,63 @@ type Event = {
   date: string;
   severity: string;
   url: string;
+  lon: number | null;
+  lat: number | null;
 };
 
 let memo: { at: number; events: Event[] } | null = null;
 const MEMO_MS = 10 * 60_000;
+const extraMemo = new Map<string, Event | null>();
+
+function point(f: any): [number | null, number | null] {
+  const g = f?.geometry;
+  if (g?.type === "Point" && Array.isArray(g.coordinates)) return [Number(g.coordinates[0]), Number(g.coordinates[1])];
+  return [null, null];
+}
+
+function toEvent(f: any): Event {
+  const p = f?.properties ?? {};
+  const [lon, lat] = point(f);
+  return {
+    type: String(p.eventtype),
+    id: String(p.eventid),
+    alert: String(p.alertlevel ?? "").toUpperCase(),
+    name: String(p.name ?? p.htmldescription ?? "").slice(0, 120),
+    countries: String(p.country ?? "")
+      .split(",")
+      .map((c: string) => c.trim())
+      .filter(Boolean)
+      .slice(0, 4),
+    iso3: String(p.iso3 ?? ""),
+    date: String(p.fromdate ?? "").slice(0, 10),
+    severity: String(p.severitydata?.severitytext ?? "").slice(0, 100),
+    url: `https://www.gdacs.org/report.aspx?eventtype=${p.eventtype}&eventid=${p.eventid}`,
+    lon,
+    lat,
+  };
+}
+
+/** Single events (e.g. ones a pool already paid) that may be older than the recent list. */
+async function loadExtra(keys: string[]): Promise<Event[]> {
+  const out: Event[] = [];
+  for (const key of keys) {
+    if (!extraMemo.has(key)) {
+      const [type, id] = key.split(":");
+      try {
+        const res = await fetch(`https://www.gdacs.org/gdacsapi/api/events/geteventdata?eventtype=${type}&eventid=${id}`, {
+          headers: { accept: "application/json" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        extraMemo.set(key, res.ok ? toEvent(await res.json()) : null);
+      } catch {
+        continue; // not memoised, so the next request retries
+      }
+    }
+    const e = extraMemo.get(key);
+    if (e) out.push(e);
+  }
+  return out;
+}
 
 async function load(): Promise<Event[]> {
   const to = new Date();
@@ -41,31 +94,22 @@ async function load(): Promise<Event[]> {
   const body = await res.json();
   const features: any[] = Array.isArray(body?.features) ? body.features : [];
   return features
-    .map((f) => f?.properties ?? {})
-    .filter((p) => HAZARDS.includes(String(p.eventtype)) && /^\d+$/.test(String(p.eventid)))
-    .map((p) => ({
-      type: String(p.eventtype),
-      id: String(p.eventid),
-      alert: String(p.alertlevel ?? "").toUpperCase(),
-      name: String(p.name ?? "").slice(0, 120),
-      countries: String(p.country ?? "")
-        .split(",")
-        .map((c: string) => c.trim())
-        .filter(Boolean)
-        .slice(0, 4),
-      iso3: String(p.iso3 ?? ""),
-      date: String(p.fromdate ?? "").slice(0, 10),
-      severity: String(p.severitydata?.severitytext ?? "").slice(0, 100),
-      url: `https://www.gdacs.org/report.aspx?eventtype=${p.eventtype}&eventid=${p.eventid}`,
-    }))
+    .filter((f) => HAZARDS.includes(String(f?.properties?.eventtype)) && /^\d+$/.test(String(f?.properties?.eventid)))
+    .map(toEvent)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const extraKeys = (new URL(request.url).searchParams.get("extra") ?? "")
+    .split(",")
+    .filter((k) => /^(EQ|TC|FL|VO|DR|WF):\d{1,10}$/.test(k))
+    .slice(0, 20);
   try {
     if (!memo || Date.now() - memo.at > MEMO_MS) memo = { at: Date.now(), events: await load() };
+    const known = new Set(memo.events.map((e) => `${e.type}:${e.id}`));
+    const extra = await loadExtra(extraKeys.filter((k) => !known.has(k)));
     return Response.json(
-      { events: memo.events, source: "GDACS event list (Orange and Red, last 120 days)" },
+      { events: memo.events, extra, source: "GDACS event list (Orange and Red, last 120 days)" },
       { headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=86400" } }
     );
   } catch (err) {

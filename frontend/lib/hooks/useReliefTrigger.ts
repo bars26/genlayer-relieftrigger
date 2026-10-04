@@ -79,14 +79,38 @@ export function useAllPools() {
   };
 }
 
-/** Recent Orange and Red GDACS alerts, from the app's cached /api/events route. */
+/** Event keys ("EQ:1474477") that some pool has already paid. */
+export function usePaidEventKeys(): string[] {
+  const { pools } = useAllPools();
+  return useMemo(() => {
+    const keys = new Set<string>();
+    for (const p of pools) {
+      try {
+        for (const k of JSON.parse(p.paid_events_json || "[]") as string[]) keys.add(k);
+      } catch {
+        // ignore a malformed list
+      }
+    }
+    return [...keys].sort();
+  }, [pools]);
+}
+
+/**
+ * Recent Orange and Red GDACS alerts, from the app's cached /api/events route, plus the
+ * paid events (which can be older than the recent list) so the map can mark them.
+ */
 export function useRecentEvents() {
-  return useQuery<GdacsEvent[], Error>({
-    queryKey: ["gdacsEvents"],
+  const paid = usePaidEventKeys();
+  return useQuery<{ events: GdacsEvent[]; extra: GdacsEvent[] }, Error>({
+    queryKey: ["gdacsEvents", paid.join(",")],
     queryFn: async () => {
-      const body = await fetchJson("/api/events");
-      return Array.isArray(body.events) ? (body.events as GdacsEvent[]) : [];
+      const body = await fetchJson(paid.length ? `/api/events?extra=${encodeURIComponent(paid.join(","))}` : "/api/events");
+      return {
+        events: Array.isArray(body.events) ? (body.events as GdacsEvent[]) : [],
+        extra: Array.isArray(body.extra) ? (body.extra as GdacsEvent[]) : [],
+      };
     },
+    placeholderData: (prev) => prev,
     staleTime: 10 * 60_000,
     retry: 1,
     refetchOnWindowFocus: false,

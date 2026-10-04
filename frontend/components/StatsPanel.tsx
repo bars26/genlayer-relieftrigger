@@ -20,7 +20,7 @@ export function StatsPanel() {
       <h3 className="text-xl font-bold flex items-center gap-2"><Coins className="w-5 h-5 text-accent" /> Pre-positioned now</h3>
       <div className="text-3xl font-bold">{formatGen(sum("balance"))} <span className="text-base text-muted-foreground">GEN</span></div>
       <div className="grid grid-cols-3 gap-3">
-        {cell("Open", count("open"), "text-accent")}
+        {cell("Open", count("open"), "text-sky-300")}
         {cell("Claim pending", count("pending"), "text-orange-300")}
         {cell("Closed", count("closed"))}
       </div>

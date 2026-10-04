@@ -6,7 +6,7 @@ import { CreatePoolModal } from "./CreatePoolModal";
 import { FaucetButton } from "./FaucetButton";
 import { useAllPools } from "@/lib/hooks/useReliefTrigger";
 import { formatGen, wei } from "@/lib/contracts/types";
-import { Logo, LogoMark } from "./Logo";
+import { BrandMark } from "./BrandMark";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -62,15 +62,15 @@ export function Navbar() {
         <div
           className="backdrop-blur-xl border transition-all duration-500 ease-out md:rounded-none"
           style={{
-            borderColor: `oklch(0.3 0.02 0 / ${0.4 + scrollProgress * 0.4})`,
-            background: `linear-gradient(135deg, oklch(0.18 0.01 0 / ${0.1 + scrollProgress * 0.3}) 0%, oklch(0.15 0.01 0 / ${0.05 + scrollProgress * 0.25}) 50%, oklch(0.16 0.01 0 / ${0.08 + scrollProgress * 0.27}) 100%)`,
+            borderColor: `rgb(34 49 75 / ${0.5 + scrollProgress * 0.5})`,
+            background: `rgb(11 19 32 / ${0.55 + scrollProgress * 0.35})`,
             borderRadius: `${borderRadius}px`,
             borderWidth: '1px',
             borderLeftWidth: isScrolled ? '1px' : '0px',
             borderRightWidth: isScrolled ? '1px' : '0px',
             borderTopWidth: isScrolled ? '1px' : '0px',
             boxShadow: isScrolled
-              ? '0 32px 64px 0 rgba(0, 0, 0, 0.2), inset 0 1px 0 0 oklch(0.3 0.02 0 / 0.3)'
+              ? '0 24px 48px 0 rgba(0, 0, 0, 0.35)'
               : 'none',
             backdropFilter: 'blur(16px) saturate(180%)',
             WebkitBackdropFilter: 'blur(16px) saturate(180%)',
@@ -88,10 +88,8 @@ export function Navbar() {
             >
               {/* Left: Logo */}
               <div className="flex items-center gap-3">
-                {/* Show mark only on mobile, full logo on desktop */}
-                <LogoMark size="md" className="flex md:hidden" />
-                <Logo size="md" className="hidden md:flex" />
-                <span className="hidden sm:inline text-lg md:text-xl font-bold ml-2">ReliefTrigger</span>
+                <BrandMark size={30} />
+                <span className="hidden sm:inline text-lg md:text-xl font-bold">ReliefTrigger</span>
               </div>
 
               {/* Center: Stats */}

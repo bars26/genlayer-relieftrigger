@@ -68,6 +68,8 @@ export interface GdacsEvent {
   date: string;
   severity: string;
   url: string;
+  lon: number | null;
+  lat: number | null;
 }
 
 export interface TransactionReceipt {
@@ -172,16 +174,20 @@ export const CODE_TEXT: Record<string, string> = {
 };
 
 export const STATE_STYLE: Record<PoolState, string> = {
-  open: "bg-accent/15 text-accent border-accent/40",
+  open: "bg-sky-500/15 text-sky-300 border-sky-500/40",
   pending: "bg-orange-500/20 text-orange-300 border-orange-500/40",
   closed: "bg-white/5 text-muted-foreground border-white/10",
 };
 
 export const ALERT_STYLE: Record<string, string> = {
   RED: "text-red-400",
-  ORANGE: "text-orange-300",
+  ORANGE: "text-amber-400",
   GREEN: "text-green-400",
 };
+
+/** Map and legend colours for GDACS alert levels and paid events. */
+export const ALERT_HEX: Record<string, string> = { RED: "#EF4444", ORANGE: "#F59E0B", GREEN: "#22C55E" };
+export const PAID_HEX = "#22C55E";
 
 export const gdacsUrl = (type: string, id: string) =>
   `https://www.gdacs.org/report.aspx?eventtype=${type}&eventid=${id}`;

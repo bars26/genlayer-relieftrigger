@@ -6,10 +6,12 @@ import { useRecentEvents } from "@/lib/hooks/useReliefTrigger";
 import { pickEvent, usePickedEvent } from "@/lib/hooks/usePickedEvent";
 import { ALERT_STYLE, HAZARD_LABEL } from "@/lib/contracts/types";
 import { Button } from "./ui/button";
+import { HazardIcon } from "./HazardIcon";
 
 /** Recent Orange and Red GDACS alerts. Picking one pre-fills every pool's trigger form. */
 export function RecentEvents() {
-  const { data: events = [], isLoading, isError, refetch } = useRecentEvents();
+  const { data, isLoading, isError, refetch } = useRecentEvents();
+  const events = data?.events ?? [];
   const picked = usePickedEvent();
   const [showAll, setShowAll] = useState(false);
   const list = showAll ? events : events.slice(0, 8);
@@ -36,6 +38,7 @@ export function RecentEvents() {
               <div className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${active ? "border-accent bg-accent/10" : "border-white/10"}`}>
                 <button type="button" onClick={() => pickEvent(e.type, e.id, e.name)} className="flex-1 text-left" aria-pressed={active}>
                   <span className="flex items-center gap-2">
+                    <HazardIcon code={e.type} className={`w-3.5 h-3.5 ${ALERT_STYLE[e.alert] ?? ""}`} />
                     <span className={`font-bold ${ALERT_STYLE[e.alert] ?? ""}`}>{e.alert.toLowerCase()}</span>
                     <span className="font-mono text-muted-foreground">{e.type}:{e.id}</span>
                     <span className="text-muted-foreground">{e.date}</span>

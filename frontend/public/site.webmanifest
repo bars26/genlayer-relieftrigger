@@ -4,8 +4,8 @@
   "description": "Pre-funded disaster relief triggered by GDACS alerts, on GenLayer",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#9B6AF6",
+  "background_color": "#0B1320",
+  "theme_color": "#0B1320",
   "icons": [
     {
       "src": "/favicon.svg",

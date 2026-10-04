@@ -10,6 +10,7 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { HazardIcon } from "./HazardIcon";
 
 const EMPTY = {
   name: "",
@@ -131,8 +132,9 @@ export function CreatePoolModal() {
                   key={h.code}
                   onClick={() => toggleHazard(h.code)}
                   aria-pressed={form.hazards.includes(h.code)}
-                  className={`rounded-md border px-2.5 py-1 text-xs ${form.hazards.includes(h.code) ? "border-accent bg-accent/15 text-accent" : "border-white/15 text-muted-foreground"}`}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${form.hazards.includes(h.code) ? "border-accent bg-accent/15 text-accent" : "border-white/15 text-muted-foreground"}`}
                 >
+                  <HazardIcon code={h.code} className="w-3.5 h-3.5" />
                   {h.label}
                 </button>
               ))}
