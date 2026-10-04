@@ -45,7 +45,7 @@ transaction hash is in [`docs/REPRODUCTION.md`](docs/REPRODUCTION.md).
 | DEMO wildfire recovery, WF, six Mediterranean countries, Red | WF 1029628, the July 2026 forest fires in France | Red, FRA, 47,910 ha burned | **Meets** | **3 GEN to the responder** |
 
 In the scripted run the responder's wallet went from 1 to **7 GEN** (4 + 2), the donors paid exactly what they put in,
-and the contract held the 19 GEN left in the three pools; the wildfire pool, added afterwards, took it to **10 GEN**. A 0.05 GEN donation below the minimum was refunded, not kept.
+and the contract held the 19 GEN left in the three pools; the wildfire pool, added afterwards, brought the responder to **10 GEN**. A 0.05 GEN donation below the minimum was refunded, not kept.
 
 The demo pool names and terms are written for the test; the events and every fact the validators read are real GDACS and
 USGS records.
