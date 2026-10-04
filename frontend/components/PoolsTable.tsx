@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, HeartHandshake, Loader2, Search } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, ExternalLink, HeartHandshake, Loader2, RefreshCw, Search } from "lucide-react";
 import { useAllPools } from "@/lib/hooks/useReliefTrigger";
 import {
   ALERT_STYLE,
@@ -26,7 +26,7 @@ import { AddressDisplay } from "./AddressDisplay";
 const STATES: (PoolState | "any")[] = ["any", "open", "pending", "closed"];
 
 export function PoolsTable() {
-  const { pools, failedIds, isLoading, isFetching, isError, error, refetch } = useAllPools();
+  const { pools, failedIds, fetchedAt, isLoading, isFetching, isError, error, refetch } = useAllPools();
   const [query, setQuery] = useState("");
   const [state, setState] = useState<PoolState | "any">("any");
 
@@ -91,6 +91,14 @@ export function PoolsTable() {
             <option key={s} value={s} className="bg-background">{s === "any" ? "Any state" : s}</option>
           ))}
         </select>
+      </div>
+      <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {fetchedAt ? `Read from the contract at ${fetchedAt.slice(11, 19)} UTC.` : "Read from the contract."} Your own writes update their pool at once.
+        </span>
+        <button type="button" onClick={() => refetch()} disabled={isFetching} className="inline-flex items-center gap-1 hover:text-accent disabled:opacity-50">
+          <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} /> Refresh
+        </button>
       </div>
       {filtered.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">No pools match.</p>

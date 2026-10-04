@@ -21,7 +21,7 @@ export function useReliefContract(): ReliefTrigger | null {
   );
 }
 
-type PoolsData = { pools: Pool[]; failedIds: string[] };
+type PoolsData = { pools: Pool[]; failedIds: string[]; fetchedAt?: string };
 
 async function fetchJson(url: string, timeoutMs = 25_000) {
   const ctrl = new AbortController();
@@ -44,7 +44,7 @@ export function useAllPools() {
       try {
         const body = await fetchJson("/api/pools");
         if (!Array.isArray(body.pools)) throw new Error("Malformed snapshot");
-        return { pools: body.pools as Pool[], failedIds: (body.failedIds ?? []) as string[] };
+        return { pools: body.pools as Pool[], failedIds: (body.failedIds ?? []) as string[], fetchedAt: body.fetchedAt as string | undefined };
       } catch (snapshotErr) {
         if (!contract) throw classifyError(snapshotErr, "read");
         const ids = await contract.listPools();
@@ -58,6 +58,7 @@ export function useAllPools() {
         return {
           pools: rows.filter((r) => r.pool).map((r) => r.pool as Pool),
           failedIds: rows.filter((r) => !r.pool).map((r) => r.id),
+          fetchedAt: new Date().toISOString(),
         };
       }
     },
@@ -69,6 +70,7 @@ export function useAllPools() {
   return {
     pools: query.data?.pools ?? [],
     failedIds: query.data?.failedIds ?? [],
+    fetchedAt: query.data?.fetchedAt,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     isError: query.isError,
@@ -101,6 +103,7 @@ async function mergeFreshPool(qc: ReturnType<typeof useQueryClient>, contract: R
       return {
         pools: i >= 0 ? pools.map((p) => (p.id === id ? pool : p)) : [...pools, pool],
         failedIds: (prev?.failedIds ?? []).filter((x) => x !== id),
+        fetchedAt: prev?.fetchedAt,
       };
     });
   } catch {

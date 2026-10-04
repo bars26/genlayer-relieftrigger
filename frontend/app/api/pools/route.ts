@@ -17,7 +17,7 @@ const RPC = process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://studio.genlayer
 
 type Snapshot = { pools: unknown[]; failedIds: string[]; fetchedAt: string };
 let memo: { at: number; data: Snapshot } | null = null;
-const MEMO_MS = 20_000;
+const MEMO_MS = 10_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -71,8 +71,10 @@ export async function GET() {
     return Response.json(memo.data, {
       headers: {
         "Cache-Control": partial
-          ? "public, s-maxage=10, stale-while-revalidate=60"
-          : "public, s-maxage=30, stale-while-revalidate=86400",
+          ? "public, s-maxage=10, stale-while-revalidate=20"
+          : // Short on purpose: a long stale-while-revalidate serves the first visitor after a quiet
+            // period a snapshot from hours ago, so a pool that was triggered meanwhile looks unchanged.
+            "public, s-maxage=15, stale-while-revalidate=45",
       },
     });
   } catch (err) {
