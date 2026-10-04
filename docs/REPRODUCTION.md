@@ -71,6 +71,15 @@ All ACCEPTED by validator consensus with contract execution SUCCESS.
 | recipient | `trigger("pool_2", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xa94badf4…36848a`](https://explorer-studio.genlayer.com/tx/0xa94badf4558948b7227ccc46a80c553407a000f8bc6fd0838f53bd1d2a36848a) |
 | recipient | `resolve("pool_2")` |  | ACCEPTED | SUCCESS | dismissed | [`0x4fd9f753…6db6dd`](https://explorer-studio.genlayer.com/tx/0x4fd9f7532bb188ac2ae1775dc447e7acf03787766b3bf8dde96be0b6a76db6dd) |
 
+## Wallet test from the app
+
+Triggered from the live app with MetaMask (wallet `0x4F80B5c475fcEd34fc9A07FfCcF39E1Adc1406bf`), picking Hurricane
+POLO-26 from the "Recent GDACS alerts" panel and triggering the Rakhine earthquake pool (`pool_2`):
+[`0xe6001787…1cd1aa6`](https://explorer-studio.genlayer.com/tx/0xe600178704082dad5a86b4afc935d195add91cae1247c66a2b9a066b61cd1aa6),
+FINALIZED, execution SUCCESS. Validators read TC 1001325 (Red, MEX, 287 km/h) and returned `DOES_NOT_MEET` with reason
+code `hazard`: a cyclone cannot pay an earthquake pool. The claim pays nothing, so the next trigger on `pool_2`
+supersedes it.
+
 ## Close and reclaim
 
 `pool_1`'s coverage ends on 2026-10-04 (UTC), so it can be closed from 2026-10-05. Then donor-1 (5 of 8 GEN donated) and
