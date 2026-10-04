@@ -1,0 +1,184 @@
+{
+    "contract": "0x94015e773191C26E8504e1af30463d1BFBE2311B",
+    "donor1": "0x049D0ebeE12127ac0342F2D8f469DD64E0213D6B",
+    "donor2": "0xac1970b0e4Bb2aFb5f1E1d7422D16532E1424ee8",
+    "recipient": "0x9286D4eb4Ce3469cE9D5a1Ff8B1DAd9D2e82074E",
+    "ids": {
+        "myanmar": "pool_0",
+        "mexico": "pool_1",
+        "rakhine": "pool_2"
+    },
+    "log": [
+        {
+            "who": "donor-1",
+            "call": "create_pool(\"Central Myanmar earthquake response\", \"0x9286D4eb4Ce3469cE9D5a1Ff8B1DAd9D2e820, \"EQ\", \"MMR\", \"Orange\", \"7\", 1000000, \"The earthquake struck the Mandalay or S, 4 GEN, \"2025-01-01\", \"2026-12-31\")",
+            "value": "10",
+            "hash": "0x3b6fabada56a148ffdaa61bcf0fea1b41ebbb972a995055eb74c5863bb332905",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "pool_0"
+        },
+        {
+            "who": "donor-2",
+            "call": "donate(\"pool_0\")",
+            "value": "5",
+            "hash": "0x8701e8efe10e55c5813381b805c5069a0c9e6fa7c1e0494355cc3552f27fbca4",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "donated"
+        },
+        {
+            "who": "donor-2",
+            "call": "donate(\"pool_0\")",
+            "value": "0.05",
+            "hash": "0x5d9ce42ab51068f323c189a0ad2ecdc298c2ada0f806c89c157a88d9e14c1113",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "REFUNDED: A donation must be at least 0.1 GEN"
+        },
+        {
+            "who": "donor-1",
+            "call": "create_pool(\"Mexico Pacific hurricane fund\", \"0x9286D4eb4Ce3469cE9D5a1Ff8B1DAd9D2e820, \"TC\", \"MEX\", \"Red\", \"180\", 0, \"\", 2 GEN, \"2026-06-01\", \"2026-10-04\")",
+            "value": "5",
+            "hash": "0x3386c492cf3277c1a1bb11b30a497fafb36a18ad6cb69a1aca8e3e70b1f09da5",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "pool_1"
+        },
+        {
+            "who": "donor-2",
+            "call": "donate(\"pool_1\")",
+            "value": "3",
+            "hash": "0xeb1ff9e07fdd6f742df6c7c9bc28607343249c66c18cbc9b1e273bce92e9eb5d",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "donated"
+        },
+        {
+            "who": "donor-1",
+            "call": "create_pool(\"Rakhine coast earthquake response\", \"0x9286D4eb4Ce3469cE9D5a1Ff8B1DAd9D2e820, \"EQ\", \"MMR\", \"Orange\", \"6\", 0, \"The earthquake struck Rakhine State on , 1 GEN, \"2025-01-01\", \"2026-12-31\")",
+            "value": "2",
+            "hash": "0xa9ba9a683787da520799f81cddb758216e51ed00b13857b6166408e0295bb165",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "pool_2"
+        },
+        {
+            "who": "recipient",
+            "call": "trigger(\"pool_0\", \"EQ\", \"1474479\")",
+            "value": "0",
+            "hash": "0xd34dd0748442377cb50bb1f93c6d43684164c94424dc07f36c6dd4af17167753",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "DOES_NOT_MEET"
+        },
+        {
+            "who": "recipient",
+            "call": "resolve(\"pool_0\")",
+            "value": "0",
+            "hash": "0x38cdcbc25ddef1f1bb4068bc82bcb0f9180ce45ee9f8ef3f24f3644ee7e8875c",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "dismissed"
+        },
+        {
+            "who": "donor-2",
+            "call": "trigger(\"pool_0\", \"EQ\", \"1477002\")",
+            "value": "0",
+            "hash": "0x73aef46c4f6d36d0f5e79d69ee7a9c385fcd71c7980d69677e14489a7f90c571",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "DOES_NOT_MEET"
+        },
+        {
+            "who": "recipient",
+            "call": "resolve(\"pool_0\")",
+            "value": "0",
+            "hash": "0xb139136d9c9daabda18ca6662d6312953178254e5e38991989e2cf3c308b84c7",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "dismissed"
+        },
+        {
+            "who": "recipient",
+            "call": "trigger(\"pool_0\", \"EQ\", \"1474477\")",
+            "value": "0",
+            "hash": "0x3e0b146679668eb7d4abdfa2c194b146c4ce1ebf19c5739e97f9e95c0c761d1d",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "MEETS"
+        },
+        {
+            "who": "donor-1",
+            "call": "resolve(\"pool_0\")",
+            "value": "0",
+            "hash": "0x46309e776e9836603a242155fac57eeb3fbd80fd3408cb73c23639504a5ecca9",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "paid"
+        },
+        {
+            "who": "donor-2",
+            "call": "trigger(\"pool_1\", \"EQ\", \"1474477\")",
+            "value": "0",
+            "hash": "0xf04eaf487d1b2a69798a5abdb0d4ebd3018b72c67f4fdf0ee4010f4e3e300dcb",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "DOES_NOT_MEET"
+        },
+        {
+            "who": "recipient",
+            "call": "resolve(\"pool_1\")",
+            "value": "0",
+            "hash": "0xb140f3cf67b023d3e47297fa3b82cb86a53ec6cf8ef9ca7998e7d68d03133f7a",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "dismissed"
+        },
+        {
+            "who": "recipient",
+            "call": "trigger(\"pool_1\", \"TC\", \"1001325\")",
+            "value": "0",
+            "hash": "0x9d2dee4d4772e64bc6e381ff8676dc382b0a8b9e09e80481440481eff222d6ed",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "MEETS"
+        },
+        {
+            "who": "donor-2",
+            "call": "contest(\"pool_1\")",
+            "value": "0",
+            "hash": "0xf914c75503f158deedc5703b5f1370bcb12990f581d2933235f6aae58c2b5409",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "MEETS"
+        },
+        {
+            "who": "donor-2",
+            "call": "resolve(\"pool_1\")",
+            "value": "0",
+            "hash": "0xa738de4d2e106a5a454f2202226465ab5a5490f6dbb0b7ccb817ee014754a4d6",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "paid"
+        },
+        {
+            "who": "recipient",
+            "call": "trigger(\"pool_2\", \"EQ\", \"1474477\")",
+            "value": "0",
+            "hash": "0x1f42fecc119706f57a03837d40acd45fed6e406b38ff7fcb7b5b5ce24f837c56",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "DOES_NOT_MEET"
+        },
+        {
+            "who": "recipient",
+            "call": "resolve(\"pool_2\")",
+            "value": "0",
+            "hash": "0xf867f157f8187e82ea13aba1690acd19150ce5e1c0dfaa278ad54703f9fe99dd",
+            "status": "ACCEPTED",
+            "exec": "SUCCESS",
+            "returned": "dismissed"
+        }
+    ]
+}
