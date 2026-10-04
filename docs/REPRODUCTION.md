@@ -71,6 +71,30 @@ All ACCEPTED by validator consensus with contract execution SUCCESS.
 | recipient | `trigger("pool_2", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xa94badf4…36848a`](https://explorer-studio.genlayer.com/tx/0xa94badf4558948b7227ccc46a80c553407a000f8bc6fd0838f53bd1d2a36848a) |
 | recipient | `resolve("pool_2")` |  | ACCEPTED | SUCCESS | dismissed | [`0x4fd9f753…6db6dd`](https://explorer-studio.genlayer.com/tx/0x4fd9f7532bb188ac2ae1775dc447e7acf03787766b3bf8dde96be0b6a76db6dd) |
 
+## A forward-looking pool
+
+The pools above prove the mechanism on past disasters. Real use is the other way round: the money waits for a disaster
+that has not happened yet. `pool_3` is a labelled DEMO of that, for the long-expected North Anatolian Fault earthquake
+near Istanbul:
+
+| Term | Value |
+|---|---|
+| Name | DEMO · Istanbul / Marmara earthquake response |
+| Hazard, country, alert | EQ · TUR · Red |
+| Magnitude, exposure | M ≥ 7 (GDACS and USGS within 0.3) · ≥ 1,000,000 people in MMI VII+ shaking |
+| Area (LLM) | *"The earthquake struck the Marmara region of Türkiye, affecting Istanbul, Kocaeli, Sakarya, Yalova, Tekirdağ or Bursa province."* |
+| Coverage | 2026-10-04 → 2036-10-04 |
+| Payout | 5 GEN per qualifying event, to the demo responder wallet `0xb1eEAF03DD62b9890dB2393Da58e05C632779e7d` |
+| Funding | donor-1 20 GEN ([`0x9e4ce431…912465`](https://explorer-studio.genlayer.com/tx/0x9e4ce431bdb8d40cc586862dde0df3f6b06f5329d9525237d3ca1911aa912465)), donor-2 10 GEN ([`0xac78846d…c34c86`](https://explorer-studio.genlayer.com/tx/0xac78846df2e5efcfe36e9042da1bde4d430195dfa3b2de5cc4f9f39f5ee34c86)) |
+
+GDACS alert levels already weigh exposure and vulnerability, which is why a Red-alert term separates disasters that
+overwhelm local capacity from strong but well-absorbed earthquakes. For scale: the 2023 Kahramanmaraş earthquake is GDACS
+[EQ 1357372](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1357372), Red, M7.8 (USGS M7.8), about 3.7 million
+people exposed. It would not trigger `pool_3` (it predates the coverage and struck south-east Türkiye, not Marmara); a
+pool written for that region before February 2023 would have paid within the hour.
+
+The responder wallet is a throwaway demo address. ReliefTrigger does not represent any real organisation.
+
 ## Wallet test from the app
 
 Triggered from the live app with MetaMask (wallet `0x4F80B5c475fcEd34fc9A07FfCcF39E1Adc1406bf`), picking Hurricane

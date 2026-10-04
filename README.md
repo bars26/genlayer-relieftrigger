@@ -49,6 +49,11 @@ holds the 19 GEN left in the three pools. A 0.05 GEN donation below the minimum 
 The demo pool names and terms are written for the test; the events and every fact the validators read are real GDACS and
 USGS records.
 
+Those pools prove the mechanism on past disasters. Real use runs the other way: the GEN waits in the contract for a
+disaster that has not happened yet, so nothing has to be raised in the first 48 hours. `pool_3` is a labelled DEMO of
+that: 30 GEN pre-positioned for a Red-alert M7+ earthquake in the Marmara region of Türkiye (the long-expected North
+Anatolian Fault event near Istanbul), covering 2026 to 2036.
+
 ## How a claim is assessed
 
 Each validator runs the same function inside `gl.eq_principle.strict_eq`:
