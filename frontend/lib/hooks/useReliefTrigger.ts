@@ -175,7 +175,8 @@ export function usePoolWrite() {
             result = await contract.donate(vars.id, vars.value, onProgress);
             break;
           case "trigger":
-            if (fresh!.state !== "open") refuse(`This pool is ${fresh!.state}; it cannot be triggered right now.`);
+            if (fresh!.state === "closed") refuse("This pool is closed.");
+            if (fresh!.state === "pending" && fresh!.claim_verdict === "MEETS") refuse("A qualifying claim is pending; it must be resolved first.");
             result = await contract.trigger(vars.id, vars.type, vars.eventId, onProgress);
             note = VERDICT_TEXT[String(result.returned)] ?? "Claim recorded.";
             break;

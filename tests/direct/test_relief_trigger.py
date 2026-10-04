@@ -213,10 +213,29 @@ def test_trigger_input_validation(direct_vm, direct_deploy, direct_alice, direct
         contract.trigger(pool_id, "QUAKE", "1474477")
 
 
-def test_only_one_pending_claim(direct_vm, direct_deploy, direct_alice, direct_bob):
+def test_pending_qualifying_claim_blocks_new_triggers(direct_vm, direct_deploy, direct_alice, direct_bob):
     contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
     _trigger(direct_vm, contract, pool_id, direct_bob)
-    with direct_vm.expect_revert("Only an open pool without a pending claim can be triggered"):
+    with direct_vm.expect_revert("A qualifying claim is pending; resolve it first"):
+        contract.trigger(pool_id, "EQ", "1474477")
+
+
+def test_non_qualifying_claim_is_superseded(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
+    # A stranger parks a failing claim on the pool...
+    assert _trigger(direct_vm, contract, pool_id, direct_charlie, gdacs=_gdacs(mag=6.0), usgs=_usgs(mag=6.0)) == "DOES_NOT_MEET"
+    # ...and the real disaster replaces it at once, without waiting for the window.
+    assert _trigger(direct_vm, contract, pool_id, direct_bob) == "MEETS"
+    events = [(e["event"], e.get("code")) for e in contract.get_history(pool_id)]
+    assert events[-2:] == [("superseded", "severity"), ("triggered", "met")]
+    assert contract.get_pool(pool_id).claim_by.as_hex.lower() == to_hex(direct_bob).lower()
+
+
+def test_closed_pool_cannot_be_triggered(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
+    contract.pools[pool_id].coverage_end = "2000-01-01"
+    contract.close(pool_id)
+    with direct_vm.expect_revert("This pool is closed"):
         contract.trigger(pool_id, "EQ", "1474477")
 
 
@@ -349,3 +368,22 @@ def test_views(direct_vm, direct_deploy, direct_alice, direct_bob):
     assert contract.contest_window_seconds() == 600
     with direct_vm.expect_revert("No pool with id pool_9"):
         contract.get_pool("pool_9")
+
+
+def test_last_reclaim_takes_the_rounding_remainder(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob, amount=GEN, payout=GEN)
+    direct_vm.sender = direct_charlie
+    direct_vm.value = 2 * GEN
+    contract.donate(pool_id)
+    direct_vm.value = 0
+    contract.pools[pool_id].coverage_end = "2000-01-01"
+    contract.close(pool_id)  # 3 GEN shared 1:2, which does not divide evenly in wei below
+    contract.pools[pool_id].closing_balance = 3 * GEN - 1
+    contract.pools[pool_id].balance = 3 * GEN - 1
+    direct_vm.sender = direct_alice
+    first = int(contract.reclaim(pool_id))
+    direct_vm.sender = direct_charlie
+    last = int(contract.reclaim(pool_id))
+    assert first == (3 * GEN - 1) // 3
+    assert first + last == 3 * GEN - 1 and int(contract.get_pool(pool_id).balance) == 0
+

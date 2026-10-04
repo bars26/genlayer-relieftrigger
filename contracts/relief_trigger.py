@@ -360,10 +360,16 @@ Respond only with that JSON, without any prefix or suffix.
 
     @gl.public.write
     def trigger(self, pool_id: str, event_type: str, event_id: str) -> str:
-        """Permissionless: validators check a GDACS event against the pool's terms."""
+        """Permissionless: validators check a GDACS event against the pool's terms.
+
+        A pending claim that does not MEET the terms pays nothing, so a new trigger replaces it
+        (logged as superseded). Otherwise anyone could hold a pool with irrelevant events while
+        a real disaster waits. A pending MEETS claim cannot be replaced."""
         pool = self._get(pool_id)
-        if pool.state != STATE_OPEN:
-            raise gl.vm.UserError("Only an open pool without a pending claim can be triggered")
+        if pool.state == STATE_CLOSED:
+            raise gl.vm.UserError("This pool is closed")
+        if pool.state == STATE_PENDING and pool.claim_verdict == "MEETS":
+            raise gl.vm.UserError("A qualifying claim is pending; resolve it first")
         event_type, event_id = self._text(event_type).upper(), self._text(event_id)
         if event_type not in HAZARDS or not re.match(r"^\d{1,10}$", event_id):
             raise gl.vm.UserError("event must be a GDACS event type (EQ, TC, FL, VO, DR, WF) and a numeric event id")
@@ -374,6 +380,8 @@ Respond only with that JSON, without any prefix or suffix.
             raise gl.vm.UserError("The pool has no funds left")
 
         result = self._assess(pool, event_type, event_id)
+        if pool.state == STATE_PENDING:
+            self._log(pool, "superseded", event_key=pool.claim_event, verdict=pool.claim_verdict, code=pool.claim_code)
         pool.state = STATE_PENDING
         pool.claim_event = key
         pool.claim_by = gl.message.sender_address
@@ -472,6 +480,9 @@ Respond only with that JSON, without any prefix or suffix.
             raise gl.vm.UserError("Already reclaimed")
         share = int(self.contributions[key]) * int(pool.closing_balance) // int(pool.total_donated)
         self.refunded[key] = True
+        others = [d for d in json.loads(pool.donors_json) if d != gl.message.sender_address.as_hex.lower()]
+        if all(self.refunded.get(f"{pool.id}|{d}", False) for d in others):
+            share = int(pool.balance)  # the last donor also takes the rounding remainder
         share = min(share, int(pool.balance))
         pool.balance = u256(int(pool.balance) - share)
         self._pay(gl.message.sender_address, share)

@@ -53,7 +53,7 @@ export interface ClaimFacts {
 
 export interface HistoryEntry {
   at: string;
-  event: "created" | "donated" | "triggered" | "contested" | "paid" | "dismissed" | "closed" | "reclaimed";
+  event: "created" | "donated" | "triggered" | "superseded" | "contested" | "paid" | "dismissed" | "closed" | "reclaimed";
   [key: string]: unknown;
 }
 

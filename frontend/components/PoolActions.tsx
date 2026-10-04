@@ -61,6 +61,36 @@ export function PoolActions({ pool }: { pool: Pool }) {
     </Button>
   );
 
+  const triggerForm = (
+    <div className="space-y-2">
+      <p className="text-sm font-semibold">Trigger with a GDACS event</p>
+      <p className="text-xs text-muted-foreground">
+        Anyone can trigger. Every validator reads the event from GDACS (and USGS for earthquakes) and checks it against the terms.
+        Pick one from &quot;Recent GDACS alerts&quot; or paste the id from a gdacs.org report URL.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor={`type-${pool.id}`}>Type</Label>
+          <select
+            id={`type-${pool.id}`}
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+          >
+            {HAZARDS.map((h) => (
+              <option key={h.code} value={h.code} className="bg-background">{h.code} · {h.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`event-${pool.id}`}>GDACS event id</Label>
+          <Input id={`event-${pool.id}`} value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="1474477" className="w-36 font-mono" />
+        </div>
+        {btn("trigger", "Trigger", () => write({ kind: "trigger", id: pool.id, type, eventId: eventId.trim() }), "gradient", !idValid)}
+      </div>
+    </div>
+  );
+
   if (pool.state === "closed") {
     return (
       <div className="space-y-2">
@@ -96,41 +126,21 @@ export function PoolActions({ pool }: { pool: Pool }) {
             Anyone can resolve after the window. Before that, only a donor can release a payout and only the recipient can dismiss.
           </p>
         )}
+        {!meets && wei(pool.balance) > 0n && (
+          <div className="pt-3 space-y-1">
+            <p className="text-xs text-muted-foreground">
+              This claim pays nothing, so a new trigger replaces it right away (it is recorded as superseded).
+            </p>
+            {triggerForm}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-4 max-w-lg">
-      {!ended && wei(pool.balance) > 0n && (
-        <div className="space-y-2">
-          <p className="text-sm font-semibold">Trigger with a GDACS event</p>
-          <p className="text-xs text-muted-foreground">
-            Anyone can trigger. Every validator reads the event from GDACS (and USGS for earthquakes) and checks it against the terms.
-            Pick one from &quot;Recent GDACS alerts&quot; or paste the id from a gdacs.org report URL.
-          </p>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={`type-${pool.id}`}>Type</Label>
-              <select
-                id={`type-${pool.id}`}
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
-              >
-                {HAZARDS.map((h) => (
-                  <option key={h.code} value={h.code} className="bg-background">{h.code} · {h.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`event-${pool.id}`}>GDACS event id</Label>
-              <Input id={`event-${pool.id}`} value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="1474477" className="w-36 font-mono" />
-            </div>
-            {btn("trigger", "Trigger", () => write({ kind: "trigger", id: pool.id, type, eventId: eventId.trim() }), "gradient", !idValid)}
-          </div>
-        </div>
-      )}
+      {!ended && wei(pool.balance) > 0n && triggerForm}
       {!ended && (
         <div className="flex items-end gap-2">
           <div className="space-y-1.5">

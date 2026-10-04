@@ -192,9 +192,9 @@ const claim = async (who, c, label, poolId, type, id) => {
 // A: an M6.7 aftershock is below the M7 trigger, so the recipient dismisses it.
 await claim("recipient", R, "A  EQ 1474479 (M6.7 aftershock)", ids.myanmar, "EQ", "1474479");
 await write(R, "recipient", "resolve", [ids.myanmar]);
-// A: an M5.5 quake two weeks later is also below the trigger.
+// A: an M5.5 quake two weeks later is also below the trigger. Nobody dismisses it: a claim that
+// pays nothing cannot hold the pool, so the next trigger supersedes it immediately.
 await claim("donor-2", D2, "A  EQ 1477002 (M5.5)", ids.myanmar, "EQ", "1477002");
-await write(R, "recipient", "resolve", [ids.myanmar]);
 // A: the M7.7 Mandalay earthquake qualifies; a donor releases the payout without waiting.
 const a = await claim("recipient", R, "A  EQ 1474477 (M7.7 Mandalay)", ids.myanmar, "EQ", "1474477");
 if (a === "MEETS") await write(D1, "donor-1", "resolve", [ids.myanmar]);

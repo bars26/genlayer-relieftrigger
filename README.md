@@ -27,7 +27,7 @@ pool funded, without trusting any single party's report.
 
 **Live app:** [relieftrigger-bars26.vercel.app](https://relieftrigger-bars26.vercel.app). Reads need no wallet. Writes need
 MetaMask on GenLayer Studio (chain 61999); the **Test GEN** button funds your wallet from the Studio faucet.
-**Contract:** [`0x94015e773191C26E8504e1af30463d1BFBE2311B`](https://explorer-studio.genlayer.com/address/0x94015e773191C26E8504e1af30463d1BFBE2311B) on GenLayer Studio.
+**Contract:** [`0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4`](https://explorer-studio.genlayer.com/address/0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4) on GenLayer Studio.
 
 ## Verified live, on real disasters
 
@@ -37,7 +37,7 @@ transaction hash is in [`docs/REPRODUCTION.md`](docs/REPRODUCTION.md).
 | Pool and terms | GDACS event (real) | Validators read | Verdict | Outcome |
 |---|---|---|---|---|
 | Central Myanmar, EQ, M ≥ 7, ≥ 1M exposed, area *"Mandalay or Sagaing Region"* | EQ 1474479, the M6.7 aftershock | M6.7, USGS M6.7 | Does not meet (`severity`) | Dismissed by the recipient |
-| same | EQ 1477002, M5.5 two weeks later | M5.5, USGS M5.3 | Does not meet (`severity`) | Dismissed |
+| same | EQ 1477002, M5.5 two weeks later | M5.5, USGS M5.3 | Does not meet (`severity`) | Left pending; the next trigger supersedes it at once |
 | same | EQ 1474477, the M7.7 Mandalay earthquake of 2025-03-28 | Red, M7.7, USGS M7.7 "Mandalay", 17.2M exposed | **Meets** (LLM judged the area) | **4 GEN to the responder** |
 | Mexico Pacific hurricanes, TC, Red, ≥ 180 km/h | EQ 1474477 | an earthquake | Does not meet (`hazard`) | Dismissed |
 | same | TC 1001325, Hurricane POLO-26 | Red, MEX, 287 km/h | **Meets**, contested by a donor, re-assessed **Meets** | **2 GEN to the responder** |
@@ -74,13 +74,13 @@ Each validator runs the same function inside `gl.eq_principle.strict_eq`:
 | Terms are fixed at creation; the recipient is fixed too | Donors know exactly what their GEN can pay for and to whom |
 | Pool ≥ 1 GEN, donation ≥ 0.1 GEN, payout ≤ initial funding | No dust pools; a pool can always pay at least once |
 | Triggering is permissionless | Nobody can sit on a qualifying disaster |
-| One pending claim per pool | No races between claims for the same balance |
+| One pending claim per pool; a pending claim that does not meet the terms is replaced by the next trigger (logged as superseded), a pending `MEETS` claim is not | No races for the same balance, and nobody can park irrelevant events on a pool to delay a real disaster |
 | Each GDACS event pays a pool at most once (`paid_events`) | Re-triggering the same disaster cannot drain the pool |
 | One contest per claim, by a donor or the recipient, within 10 minutes | A second, independent validator set can correct a bad assessment, but not forever |
 | Early resolution only by the side that gives something up: a donor can release a payout, the recipient can dismiss a failed claim | No forced waiting when the result is clear, and nobody can rush a result in their own favour |
 | After the window (or a contest) anyone resolves | A claim can never be stuck |
 | Payout = min(payout, balance), integer arithmetic | No model decides an amount |
-| After coverage ends anyone closes; each donor reclaims `contribution × closing_balance ÷ total_donated`, once | Unspent money goes back in proportion; nobody can take more than their share |
+| After coverage ends anyone closes; each donor reclaims `contribution × closing_balance ÷ total_donated`, once, and the last donor also takes the rounding remainder | Unspent money goes back in proportion; nobody can take more than their share and no wei is left stranded |
 
 ## Two GenLayer money pitfalls, and how ReliefTrigger handles them
 
@@ -108,7 +108,7 @@ way, and the app reads that return value and tells the user the GEN is on its wa
 |---|---|---|
 | `create_pool(name, recipient, hazards, countries, min_alert, min_severity, min_exposed, area_terms, payout, coverage_start, coverage_end)` | payable write | Fund a pool (≥ 1 GEN). Returns the pool id or `REFUNDED: …` |
 | `donate(pool_id)` | payable write | Add ≥ 0.1 GEN to a pool that has not ended. Returns `donated` or `REFUNDED: …` |
-| `trigger(pool_id, event_type, event_id)` | write | Consensus assessment of a GDACS event; returns the verdict |
+| `trigger(pool_id, event_type, event_id)` | write | Consensus assessment of a GDACS event; returns the verdict. Replaces a pending claim that does not meet the terms |
 | `contest(pool_id)` | write | Donor or recipient, once, within 10 minutes: independent re-assessment |
 | `resolve(pool_id)` | write | Pays the recipient on `MEETS`, otherwise dismisses; returns `paid` or `dismissed` |
 | `close(pool_id)` | write | After coverage ends, freezes the remaining balance for reclaims |
@@ -144,12 +144,13 @@ Lessons carried over from earlier projects:
 
 ## Tests
 
-38 direct-mode tests (`tests/direct/test_relief_trigger.py`) with mocked GDACS and USGS responses: pool creation and ten
+41 direct-mode tests (`tests/direct/test_relief_trigger.py`) with mocked GDACS and USGS responses: pool creation and ten
 kinds of invalid terms (all refunded, nothing stored), the minimum pool and donation, each coded term failing on its own
 while the model would have said `MEETS`, unreachable GDACS or USGS → `UNCLEAR`, GDACS/USGS disagreement, all three area
-verdicts, the non-enum LLM guard, input validation, one pending claim at a time, early-resolution rules for both sides,
+verdicts, the non-enum LLM guard, input validation, a pending qualifying claim blocking new triggers while a failing one
+is superseded, early-resolution rules for both sides,
 duplicate events, the payout cap, contest rules and window, close before and after coverage, pro-rata reclaim for two
-donors, reclaim once, and the views.
+donors, the rounding remainder going to the last reclaimer, reclaim once, and the views.
 
 ```shell
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
