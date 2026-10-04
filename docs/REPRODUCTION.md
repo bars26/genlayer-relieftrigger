@@ -95,6 +95,24 @@ pool written for that region before February 2023 would have paid within the hou
 
 The responder wallet is a throwaway demo address. ReliefTrigger does not represent any real organisation.
 
+## Wildfire
+
+`pool_4`, a labelled DEMO for forest-fire recovery (reforestation and wildlife care), shows the same mechanism on a
+different hazard. Terms: WF · ESP, FRA, GRC, ITA, PRT, TUR · Red alert · 3 GEN per qualifying fire · fires starting
+2026-06-01 to 2027-12-31 (the start is set before this summer so a real fire can be used as the test).
+
+| Step | Tx | Result |
+|---|---|---|
+| donor-1 creates the pool with 15 GEN | [`0xefbf3184…acc08`](https://explorer-studio.genlayer.com/tx/0xefbf318490de42528a51e23779f3cb23f6062f7753f9fcbd5e00e057b90acc08) | `pool_4` |
+| donor-2 donates 5 GEN | [`0x9852ab31…9eae2`](https://explorer-studio.genlayer.com/tx/0x9852ab31e27ced31fa0ddee9d30849739dc6d9fb929fd10e41bb1176de19eae2) | donated |
+| donor-2 triggers with [WF 1029628](https://www.gdacs.org/report.aspx?eventtype=WF&eventid=1029628), the July 2026 forest fires in France | [`0x01d80ead…21c10`](https://explorer-studio.genlayer.com/tx/0x01d80ead9b9309997adaba57e6e3ee1ee3a50627fdeb6933868cc6c34e121c10) | validators read Red · FRA · 2026-07-22 · 47,910 ha burned → **MEETS** (`met`) |
+| donor-1 releases the payout | [`0x043019f6…e9398`](https://explorer-studio.genlayer.com/tx/0x043019f6e222e21d5595ceb1f3bef809b6260b92be70dd3630f06f4f780e9398) | paid, FINALIZED; the responder wallet went 7 → **10 GEN** |
+
+GDACS reports a wildfire's burned area in hectares. In this version a minimum severity applies to earthquakes and
+cyclones only, so a wildfire pool sizes its trigger with the GDACS alert level (which already reflects burned area and
+people affected). A hectare threshold and splitting one payout across several purpose wallets (reforestation, wildlife
+care, affected families) are the planned next step.
+
 ## Wallet test from the app
 
 Triggered from the live app with MetaMask (wallet `0x4F80B5c475fcEd34fc9A07FfCcF39E1Adc1406bf`), picking Hurricane

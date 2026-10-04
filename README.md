@@ -42,9 +42,10 @@ transaction hash is in [`docs/REPRODUCTION.md`](docs/REPRODUCTION.md).
 | Mexico Pacific hurricanes, TC, Red, ≥ 180 km/h | EQ 1474477 | an earthquake | Does not meet (`hazard`) | Dismissed |
 | same | TC 1001325, Hurricane POLO-26 | Red, MEX, 287 km/h | **Meets**, contested by a donor, re-assessed **Meets** | **2 GEN to the responder** |
 | Rakhine coast, EQ, M ≥ 6, area *"Rakhine State on the western coast"* | EQ 1474477, the same Mandalay earthquake | every coded term passes | Does not meet (LLM judged the area) | Dismissed |
+| DEMO wildfire recovery, WF, six Mediterranean countries, Red | WF 1029628, the July 2026 forest fires in France | Red, FRA, 47,910 ha burned | **Meets** | **3 GEN to the responder** |
 
-The responder's wallet went from 1 to **7 GEN** (4 + 2), the donors paid exactly what they put in, and the contract
-holds the 19 GEN left in the three pools. A 0.05 GEN donation below the minimum was refunded, not kept.
+In the scripted run the responder's wallet went from 1 to **7 GEN** (4 + 2), the donors paid exactly what they put in,
+and the contract held the 19 GEN left in the three pools; the wildfire pool, added afterwards, took it to **10 GEN**. A 0.05 GEN donation below the minimum was refunded, not kept.
 
 The demo pool names and terms are written for the test; the events and every fact the validators read are real GDACS and
 USGS records.
