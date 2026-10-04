@@ -100,9 +100,10 @@ export function AccountPanel() {
     return (
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogTrigger asChild>
-          <Button variant="gradient" disabled={isLoading}>
-            <User className="w-4 h-4 mr-2" />
-            Connect Wallet
+          <Button variant="gradient" disabled={isLoading} aria-label="Connect wallet">
+            <User className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Connect Wallet</span>
+            <span className="sm:hidden">Connect</span>
           </Button>
         </DialogTrigger>
         <DialogContent className="brand-card border-2">
@@ -185,7 +186,7 @@ export function AccountPanel() {
   return (
     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
       <div className="flex items-center gap-4">
-        <div className="brand-card px-4 py-2 flex items-center gap-3">
+        <div className="brand-card px-4 py-2 hidden sm:flex items-center gap-3">
           <div className="flex items-center gap-2">
             <User className="w-4 h-4 text-accent" />
             <AddressDisplay address={address} maxLength={12} />

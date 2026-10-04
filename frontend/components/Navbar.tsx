@@ -77,7 +77,7 @@ export function Navbar() {
           }}
         >
           <div
-            className="px-6 transition-all duration-500 mx-auto"
+            className="px-4 sm:px-6 transition-all duration-500 mx-auto"
             style={{
               maxWidth: isScrolled ? '80rem' : '112rem',
             }}
@@ -91,7 +91,7 @@ export function Navbar() {
                 {/* Show mark only on mobile, full logo on desktop */}
                 <LogoMark size="md" className="flex md:hidden" />
                 <Logo size="md" className="hidden md:flex" />
-                <span className="text-lg md:text-xl font-bold ml-2">ReliefTrigger</span>
+                <span className="hidden sm:inline text-lg md:text-xl font-bold ml-2">ReliefTrigger</span>
               </div>
 
               {/* Center: Stats */}
@@ -109,7 +109,7 @@ export function Navbar() {
               </div>
 
               {/* Right: Actions */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <FaucetButton />
                 <CreatePoolModal />
                 <AccountPanel />

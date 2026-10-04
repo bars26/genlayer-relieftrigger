@@ -107,8 +107,8 @@ export function CreatePoolModal() {
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
       <DialogTrigger asChild>
-        <Button variant="gradient" disabled={!isConnected}>
-          <Plus className="w-4 h-4 mr-2" /> Create pool
+        <Button variant="gradient" disabled={!isConnected} aria-label="Create pool" title="Create pool">
+          <Plus className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Create pool</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="brand-card border-2 sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
