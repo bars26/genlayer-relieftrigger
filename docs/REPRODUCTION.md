@@ -124,11 +124,18 @@ supersedes it.
 
 ## Close and reclaim
 
-`pool_1`'s coverage ends on 2026-10-04 (UTC), so it can be closed from 2026-10-05. Then donor-1 (5 of 8 GEN donated) and
-donor-2 (3 of 8) reclaim their pro-rata shares of the 6 GEN left: 3.75 and 2.25 GEN.
+`pool_1`'s coverage ended on 2026-10-04 (UTC). On 2026-10-05 it was closed with 7 GEN left of 9 GEN donated (donor-1 5,
+donor-2 3, and 1 GEN donated from MetaMask during the wallet test), and each donor reclaimed their pro-rata share:
 
-```shell
-node scripts/demo.mjs <contract> close pool_1 <donor-1 key> <donor-2 key>
-```
+| Step | Tx | Amount |
+|---|---|---|
+| donor-1 closes `pool_1` | [`0x433b3631…11462c`](https://explorer-studio.genlayer.com/tx/0x433b3631e23b0ec84bedf2f2626c7ada96d04b6a040493b2818468c56211462c) | closing balance 7 GEN |
+| donor-1 reclaims (5/9) | [`0xe1481e98…2a5d99`](https://explorer-studio.genlayer.com/tx/0xe1481e982fb0eef4c69d6225c605e58c1756cc9b4fd1945b03d23ea1d02a5d99) | 3.888888888888888888 GEN |
+| donor-2 reclaims (3/9) | [`0x3158d15c…d092a8`](https://explorer-studio.genlayer.com/tx/0x3158d15ca2ded908ad683419a95ec622fe914019a14d6aa081f444d513d092a8) | 2.333333333333333333 GEN |
+| MetaMask donor reclaims from the app (1/9, last, so it also takes the rounding remainder) | [`0xedb46c65…acf7f`](https://explorer-studio.genlayer.com/tx/0xedb46c65a02e384b80c34d0f2b17a8e20871b2fecafae762557865946ebacf7f) | 0.777777777777777779 GEN |
 
-The pro-rata arithmetic, closing before the end date and reclaiming twice are covered by the direct-mode tests.
+The three shares add up to exactly 7.000000000000000000 GEN and the pool balance is 0. A second `close` sent by mistake
+([`0xe454f88b…dbc21`](https://explorer-studio.genlayer.com/tx/0xe454f88bb0c7b63d655635bd534d42ecadb5ab2364534900522457a3cefdbc21),
+no value) was rejected with "The pool is already closed" and changed nothing.
+
+After this the contract holds 62 GEN: `pool_0` 13 + `pool_2` 2 + `pool_3` 30 + `pool_4` 17.
