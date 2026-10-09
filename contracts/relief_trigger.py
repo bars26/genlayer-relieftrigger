@@ -17,6 +17,7 @@ STATE_CLOSED = "closed"  # coverage ended; donors reclaim their share
 _MIN_POOL = 10**18  # 1 GEN
 _MIN_DONATION = 10**17  # 0.1 GEN
 _CONTEST_WINDOW_SECONDS = 600
+_MAX_LIST = 200
 _MAX_MAG_GAP = 0.3  # GDACS and USGS magnitudes must agree within this
 _HISTORY_LIMIT = 12
 _HEADERS = {"accept": "application/json", "user-agent": "ReliefTrigger/1.0 (GenLayer)"}
@@ -123,7 +124,16 @@ class Pool:
     claim_verdict: str
     claim_code: str
     claim_facts_json: str
-    claim_contested: bool
+    claim_contested: bool  # True once either side has contested the current claim
+    contrib_json: str  # {"0xaddr": "wei"} every donor's total contribution
+    # Governance of the current claim, snapshotted when it is triggered: only GEN donated
+    # before the claim counts, and the recipient's own donations never count.
+    claim_weights_json: str  # {"0xaddr": "wei"} each donor's say in this claim
+    claim_weight_total: u256
+    approvals_json: str  # donors who approved releasing this payout early
+    approval_weight: u256
+    donor_contested: bool  # donors may contest a MEETS claim once
+    recipient_contested: bool  # the recipient may contest a non-MEETS claim once
     history_json: str
 
 
@@ -196,8 +206,60 @@ class ReliefTrigger(gl.Contract):
             donors = json.loads(pool.donors_json) if pool.donors_json else []
             donors.append(donor.as_hex.lower())
             pool.donors_json = json.dumps(donors)
+        contrib = json.loads(pool.contrib_json) if pool.contrib_json else {}
+        contrib[donor.as_hex.lower()] = str(before + amount)
+        pool.contrib_json = json.dumps(contrib, sort_keys=True)
         pool.balance = u256(int(pool.balance) + amount)
         pool.total_donated = u256(int(pool.total_donated) + amount)
+
+    def _open_claim_governance(self, pool: Pool) -> None:
+        """Snapshot who has a say in the claim being opened: donors as of now, minus the recipient."""
+        contrib = json.loads(pool.contrib_json) if pool.contrib_json else {}
+        recipient = pool.recipient.as_hex.lower()
+        weights = {a: w for a, w in contrib.items() if a != recipient and int(w) > 0}
+        pool.claim_weights_json = json.dumps(weights, sort_keys=True)
+        pool.claim_weight_total = u256(sum(int(w) for w in weights.values()))
+        self._reset_approvals(pool)
+        pool.donor_contested = False
+        pool.recipient_contested = False
+        pool.claim_contested = False
+
+    def _reset_approvals(self, pool: Pool) -> None:
+        pool.approvals_json = "[]"
+        pool.approval_weight = u256(0)
+
+    def _claim_weight(self, pool: Pool, who: Address) -> int:
+        weights = json.loads(pool.claim_weights_json) if pool.claim_weights_json else {}
+        return int(weights.get(who.as_hex.lower(), "0"))
+
+    def _majority_approved(self, pool: Pool) -> bool:
+        total = int(pool.claim_weight_total)
+        return total > 0 and int(pool.approval_weight) * 2 > total
+
+    def _window_open(self, pool: Pool) -> bool:
+        return self._seconds(self._now()) - self._seconds(pool.claim_at) <= _CONTEST_WINDOW_SECONDS
+
+    def _finish_claim(self, pool: Pool) -> str:
+        """Pay a MEETS claim or dismiss any other, and reopen the pool."""
+        key = pool.claim_event
+        meets = pool.claim_verdict == "MEETS"
+        if meets:
+            amount = min(int(pool.payout), int(pool.balance))
+            self._pay(pool.recipient, amount)
+            pool.balance = u256(int(pool.balance) - amount)
+            pool.total_paid = u256(int(pool.total_paid) + amount)
+            paid = json.loads(pool.paid_events_json)
+            paid.append(key)
+            pool.paid_events_json = json.dumps(paid)
+            self._log(pool, "paid", event_key=key, amount=str(amount))
+        else:
+            self._log(pool, "dismissed", event_key=key, verdict=pool.claim_verdict, code=pool.claim_code)
+        pool.state = STATE_OPEN
+        pool.claim_event, pool.claim_by, pool.claim_at = "", _ZERO, ""
+        pool.claim_weights_json, pool.claim_weight_total = "{}", u256(0)
+        self._reset_approvals(pool)
+        pool.claim_contested = pool.donor_contested = pool.recipient_contested = False
+        return "paid" if meets else "dismissed"
 
     def _assess(self, pool: Pool, event_type: str, event_id: str) -> dict:
         """One consensus assessment of a GDACS event against the pool's terms."""
@@ -335,7 +397,9 @@ Respond only with that JSON, without any prefix or suffix.
             payout=u256(payout_i), coverage_start=start, coverage_end=end, state=STATE_OPEN,
             balance=u256(0), total_donated=u256(0), total_paid=u256(0), closing_balance=u256(0),
             donors_json="[]", paid_events_json="[]", claim_event="", claim_by=_ZERO, claim_at="",
-            claim_verdict="", claim_code="", claim_facts_json="{}", claim_contested=False, history_json="[]",
+            claim_verdict="", claim_code="", claim_facts_json="{}", claim_contested=False,
+            contrib_json="{}", claim_weights_json="{}", claim_weight_total=u256(0), approvals_json="[]",
+            approval_weight=u256(0), donor_contested=False, recipient_contested=False, history_json="[]",
         )
         self._add_donation(pool, gl.message.sender_address, value)
         self.pool_count = u256(int(self.pool_count) + 1)
@@ -389,24 +453,41 @@ Respond only with that JSON, without any prefix or suffix.
         pool.claim_verdict = result["verdict"]
         pool.claim_code = result["code"]
         pool.claim_facts_json = json.dumps(result["facts"], sort_keys=True)
-        pool.claim_contested = False
+        self._open_claim_governance(pool)
         self._log(pool, "triggered", event_key=key, verdict=result["verdict"], code=result["code"])
         return result["verdict"]
 
     @gl.public.write
     def contest(self, pool_id: str) -> str:
-        """A donor or the recipient can ask once for an independent re-assessment in the window."""
+        """The side a ruling goes against asks once for an independent re-assessment.
+
+        A MEETS ruling can be contested only by a donor who had donated before the claim
+        (the recipient benefits from it); any other ruling only by the recipient. Each side
+        contests at most once per claim, and every contest restarts the contest window and
+        clears early-release approvals, so the other side can always answer a changed ruling
+        before anything is paid."""
         pool = self._get(pool_id)
         if pool.state != STATE_PENDING:
             raise gl.vm.UserError("Only a pending claim can be contested")
-        if pool.claim_contested:
-            raise gl.vm.UserError("A claim can only be contested once")
-        if self._seconds(self._now()) - self._seconds(pool.claim_at) > _CONTEST_WINDOW_SECONDS:
+        if not self._window_open(pool):
             raise gl.vm.UserError("The contest window has closed")
         sender = gl.message.sender_address
-        is_donor = self._key(pool.id, sender) in self.contributions
-        if not is_donor and sender != pool.recipient:
-            raise gl.vm.UserError("Only a donor or the recipient can contest")
+        if pool.claim_verdict == "MEETS":
+            if self._claim_weight(pool, sender) == 0:
+                raise gl.vm.UserError(
+                    "Only a donor who donated before this claim can contest a payout"
+                )
+            if pool.donor_contested:
+                raise gl.vm.UserError("Donors have already contested this claim")
+            pool.donor_contested = True
+            by = "donor"
+        else:
+            if sender != pool.recipient:
+                raise gl.vm.UserError("Only the recipient can contest a claim that does not pay")
+            if pool.recipient_contested:
+                raise gl.vm.UserError("The recipient has already contested this claim")
+            pool.recipient_contested = True
+            by = "recipient"
         event_type, event_id = pool.claim_event.split(":")
         result = self._assess(pool, event_type, event_id)
         before = pool.claim_verdict
@@ -414,44 +495,56 @@ Respond only with that JSON, without any prefix or suffix.
         pool.claim_code = result["code"]
         pool.claim_facts_json = json.dumps(result["facts"], sort_keys=True)
         pool.claim_contested = True
-        self._log(pool, "contested", by="recipient" if sender == pool.recipient else "donor",
-                  before=before, verdict=result["verdict"], code=result["code"])
+        pool.claim_at = self._now()  # a fresh window for the other side
+        self._reset_approvals(pool)
+        self._log(pool, "contested", by=by, before=before, verdict=result["verdict"], code=result["code"])
         return result["verdict"]
+
+    @gl.public.write
+    def approve_release(self, pool_id: str) -> str:
+        """A donor who donated before the claim approves paying a MEETS claim before the window ends.
+
+        Once donors holding more than half of the pre-claim donations (excluding the recipient)
+        have approved, the payout is released at once. Returns "approved" or "paid"."""
+        pool = self._get(pool_id)
+        if pool.state != STATE_PENDING or pool.claim_verdict != "MEETS":
+            raise gl.vm.UserError("Only a pending claim that meets the terms can be released")
+        sender = gl.message.sender_address
+        weight = self._claim_weight(pool, sender)
+        if weight == 0:
+            raise gl.vm.UserError("Only a donor who donated before this claim can approve its release")
+        approvals = json.loads(pool.approvals_json)
+        addr = sender.as_hex.lower()
+        if addr in approvals:
+            raise gl.vm.UserError("You have already approved this release")
+        approvals.append(addr)
+        pool.approvals_json = json.dumps(approvals)
+        pool.approval_weight = u256(int(pool.approval_weight) + weight)
+        self._log(pool, "approved", weight=str(weight), total=str(int(pool.approval_weight)),
+                  of=str(int(pool.claim_weight_total)))
+        if self._majority_approved(pool):
+            return self._finish_claim(pool)
+        return "approved"
 
     @gl.public.write
     def resolve(self, pool_id: str) -> str:
         """Close a pending claim: pay the recipient if it MEETS, otherwise dismiss it.
 
-        Anyone can resolve after the contest window. Before it, only the side that could
-        lose by resolving may waive the window: a donor for a payout, the recipient for a dismissal."""
+        Anyone can resolve once the contest window has passed. Before that, a payout needs
+        approvals from donors holding more than half of the pre-claim donations (see
+        approve_release), and only the recipient can dismiss a claim that does not pay."""
         pool = self._get(pool_id)
         if pool.state != STATE_PENDING:
             raise gl.vm.UserError("Only a pending claim can be resolved")
-        meets = pool.claim_verdict == "MEETS"
-        window_open = self._seconds(self._now()) - self._seconds(pool.claim_at) <= _CONTEST_WINDOW_SECONDS
-        if window_open and not pool.claim_contested:
-            sender = gl.message.sender_address
-            is_donor = self._key(pool.id, sender) in self.contributions
-            if not ((meets and is_donor) or (not meets and sender == pool.recipient)):
-                raise gl.vm.UserError(
-                    "The contest window is still open; only a donor can release a payout early and only the recipient can dismiss early"
-                )
-        key = pool.claim_event
-        if meets:
-            amount = min(int(pool.payout), int(pool.balance))
-            self._pay(pool.recipient, amount)
-            pool.balance = u256(int(pool.balance) - amount)
-            pool.total_paid = u256(int(pool.total_paid) + amount)
-            paid = json.loads(pool.paid_events_json)
-            paid.append(key)
-            pool.paid_events_json = json.dumps(paid)
-            self._log(pool, "paid", event_key=key, amount=str(amount))
-        else:
-            self._log(pool, "dismissed", event_key=key, verdict=pool.claim_verdict, code=pool.claim_code)
-        pool.state = STATE_OPEN
-        pool.claim_event, pool.claim_by, pool.claim_at = "", _ZERO, ""
-        pool.claim_contested = False
-        return "paid" if meets else "dismissed"
+        if self._window_open(pool):
+            if pool.claim_verdict == "MEETS":
+                if not self._majority_approved(pool):
+                    raise gl.vm.UserError(
+                        "The contest window is still open; an early payout needs approval from donors holding more than half of the pre-claim donations"
+                    )
+            elif gl.message.sender_address != pool.recipient:
+                raise gl.vm.UserError("The contest window is still open; only the recipient can dismiss early")
+        return self._finish_claim(pool)
 
     @gl.public.write
     def close(self, pool_id: str) -> None:
@@ -498,6 +591,18 @@ Respond only with that JSON, without any prefix or suffix.
     @gl.public.view
     def list_pools(self) -> list:
         return [f"pool_{i}" for i in range(int(self.pool_count))]
+
+    @gl.public.view
+    def get_pools(self, offset: int, limit: int) -> list:
+        """Up to 200 pools in one call, so a frontend reads the whole registry with one request."""
+        start, count = int(offset), min(int(limit), _MAX_LIST)
+        end = min(int(self.pool_count), max(start, 0) + max(count, 0))
+        return [self.pools[f"pool_{i}"] for i in range(max(start, 0), end)]
+
+    @gl.public.view
+    def claim_weight(self, pool_id: str, donor: str) -> str:
+        """The say a donor has in the current claim (wei donated before it, 0 for the recipient)."""
+        return str(self._claim_weight(self._get(pool_id), Address(donor)))
 
     @gl.public.view
     def get_contribution(self, pool_id: str, donor: str) -> str:

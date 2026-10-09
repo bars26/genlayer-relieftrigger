@@ -32,6 +32,13 @@ export interface Pool {
   claim_code: string;
   claim_facts_json: string;
   claim_contested: boolean;
+  contrib_json: string;
+  claim_weights_json: string;
+  claim_weight_total: string | number | bigint;
+  approvals_json: string;
+  approval_weight: string | number | bigint;
+  donor_contested: boolean;
+  recipient_contested: boolean;
   history_json: string;
 }
 
@@ -138,6 +145,19 @@ export const todayUtc = () => new Date().toISOString().slice(0, 10);
 export const coverageEnded = (p: Pool) => todayUtc() > p.coverage_end;
 
 export const donorsOf = (p: Pool) => parseJson<string[]>(p.donors_json, []);
+
+/** A donor's say in the current claim: GEN donated before it was opened (0 for the recipient). */
+export const claimWeight = (p: Pool, a?: string | null) =>
+  a ? wei(parseJson<Record<string, string>>(p.claim_weights_json, {})[a.toLowerCase()] ?? "0") : 0n;
+
+export const hasApproved = (p: Pool, a?: string | null) =>
+  !!a && parseJson<string[]>(p.approvals_json, []).some((x) => sameAddress(x, a));
+
+/** Approval share of the pre-claim donations, in percent (one decimal). */
+export const approvalPercent = (p: Pool) => {
+  const total = wei(p.claim_weight_total);
+  return total > 0n ? Number((wei(p.approval_weight) * 1000n) / total) / 10 : 0;
+};
 export const isDonor = (p: Pool, a?: string | null) => donorsOf(p).some((d) => sameAddress(d, a));
 
 export const VERDICT_STYLE: Record<Exclude<Verdict, "">, { label: string; cls: string; help: string }> = {

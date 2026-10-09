@@ -18,7 +18,9 @@ Anticipatory-action programmes (the Red Cross DREF, the UN CERF, parametric insu
 3. **Every GenLayer validator** fetches that event from GDACS itself and, for earthquakes, cross-checks the magnitude with
    USGS. Every countable term is decided in code. Only if all of them pass, and the pool has an area condition, do the
    validators' LLMs judge the area.
-4. A donor or the recipient can ask once, within 10 minutes, for an independent re-assessment.
+4. For 10 minutes the side the ruling goes against can ask once for an independent re-assessment: donors who gave
+   before the claim if it pays, the recipient if it does not. Paying out before the window ends needs approval from
+   donors holding more than half of the donations made before the claim.
 5. The payout goes **straight to the responder's wallet**. Each event pays a pool once. When coverage ends, donors
    reclaim what is left, pro-rata.
 
@@ -27,7 +29,7 @@ pool funded, without trusting any single party's report.
 
 **Live app:** [relieftrigger-bars26.vercel.app](https://relieftrigger-bars26.vercel.app). Reads need no wallet. Writes need
 MetaMask on GenLayer Studio (chain 61999); the **Test GEN** button funds your wallet from the Studio faucet.
-**Contract:** [`0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4`](https://explorer-studio.genlayer.com/address/0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4) on GenLayer Studio.
+**Contract:** [`0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab`](https://explorer-studio.genlayer.com/address/0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab) on GenLayer Studio.
 
 ## Verified live, on real disasters
 
@@ -82,9 +84,11 @@ Each validator runs the same function inside `gl.eq_principle.strict_eq`:
 | Triggering is permissionless | Nobody can sit on a qualifying disaster |
 | One pending claim per pool; a pending claim that does not meet the terms is replaced by the next trigger (logged as superseded), a pending `MEETS` claim is not | No races for the same balance, and nobody can park irrelevant events on a pool to delay a real disaster |
 | Each GDACS event pays a pool at most once (`paid_events`) | Re-triggering the same disaster cannot drain the pool |
-| One contest per claim, by a donor or the recipient, within 10 minutes | A second, independent validator set can correct a bad assessment, but not forever |
-| Early resolution only by the side that gives something up: a donor can release a payout, the recipient can dismiss a failed claim | No forced waiting when the result is clear, and nobody can rush a result in their own favour |
-| After the window (or a contest) anyone resolves | A claim can never be stuck |
+| The say in a claim is snapshotted when it is triggered: each donor's GEN given **before** the claim; the recipient's own donations never count | Nobody can buy a vote in a claim that is already open, and the beneficiary has no say in its own payout |
+| Releasing a `MEETS` payout before the contest window ends needs `approve_release` from donors holding **more than half** of that snapshot | A single or minority donor cannot pay out on behalf of everyone else |
+| Contests belong to the side a ruling goes against: donors (pre-claim) contest a payout, the recipient contests anything else; each side once per claim | The beneficiary cannot spend the only contest on a ruling that already favours it |
+| Every contest restarts the 10-minute window and clears approvals | A contest can never be used to skip straight to settlement; the other side can always answer a changed ruling |
+| Only the recipient can dismiss a non-paying claim early; after the window anyone resolves | Dismissal only costs the recipient, and a claim can never be stuck |
 | Payout = min(payout, balance), integer arithmetic | No model decides an amount |
 | After coverage ends anyone closes; each donor reclaims `contribution × closing_balance ÷ total_donated`, once, and the last donor also takes the rounding remainder | Unspent money goes back in proportion; nobody can take more than their share and no wei is left stranded |
 
@@ -115,11 +119,13 @@ way, and the app reads that return value and tells the user the GEN is on its wa
 | `create_pool(name, recipient, hazards, countries, min_alert, min_severity, min_exposed, area_terms, payout, coverage_start, coverage_end)` | payable write | Fund a pool (≥ 1 GEN). Returns the pool id or `REFUNDED: …` |
 | `donate(pool_id)` | payable write | Add ≥ 0.1 GEN to a pool that has not ended. Returns `donated` or `REFUNDED: …` |
 | `trigger(pool_id, event_type, event_id)` | write | Consensus assessment of a GDACS event; returns the verdict. Replaces a pending claim that does not meet the terms |
-| `contest(pool_id)` | write | Donor or recipient, once, within 10 minutes: independent re-assessment |
-| `resolve(pool_id)` | write | Pays the recipient on `MEETS`, otherwise dismisses; returns `paid` or `dismissed` |
+| `approve_release(pool_id)` | write | A pre-claim donor approves an early payout of a `MEETS` claim; releases it once approvals exceed half of the snapshot. Returns `approved` or `paid` |
+| `contest(pool_id)` | write | The side the ruling goes against, once per side, within the window: independent re-assessment that restarts the window |
+| `resolve(pool_id)` | write | After the window, anyone: pays the recipient on `MEETS`, otherwise dismisses. Before it, only the recipient can dismiss |
 | `close(pool_id)` | write | After coverage ends, freezes the remaining balance for reclaims |
 | `reclaim(pool_id)` | write | A donor's pro-rata share of what was not paid out; returns the amount |
-| `get_pool`, `list_pools`, `get_contribution`, `was_paid`, `get_history`, `contest_window_seconds` | views | |
+| `get_pools(offset, limit)` | view | Up to 200 pools in **one** call: the whole registry with one request |
+| `get_pool`, `list_pools`, `get_contribution`, `claim_weight`, `was_paid`, `get_history`, `contest_window_seconds` | views | |
 
 `hazards` are GDACS codes (`EQ`, `TC`, `FL`, `VO`, `DR`, `WF`); `min_severity` is an earthquake magnitude or a cyclone's
 wind speed in km/h and applies to `EQ` and `TC` events (use separate pools if you need both with different thresholds);
@@ -129,16 +135,13 @@ wind speed in km/h and applies to `EQ` and `TC` events (use separate pools if yo
 
 Next.js app in `frontend/`: a searchable pool table with each pool's fixed terms, the pending claim with the facts
 validators read, the paid events and the on-chain history; the actions your wallet can take right now (donate, trigger,
-contest, release or dismiss, close, reclaim); a create-pool form; a **Recent GDACS alerts** panel that pre-fills the
+approve an early release with a live approval bar, contest, dismiss, close, reclaim); a create-pool form; a **Recent GDACS alerts** panel that pre-fills the
 trigger form; stats; an integrator `was_paid` check; a transactions panel (hash, consensus status, contract result,
 finality) and a Studio faucet button.
 
 Lessons carried over from earlier projects:
 
-- **Reads never spend the visitor's rate-limit budget.** Studio allows 30 `gen_call`/`eth_sendRawTransaction` per minute
-  per IP, shared. The pool list comes from a CDN-cached server snapshot (`/api/pools`) and the GDACS alert list from a
-  cached server route (`/api/events`); after a write only that pool is re-read. Opening the page makes no Studio call
-  from the browser.
+- **Built around Studio's 30 requests per minute** (see the section below).
 - **ACCEPTED is not success.** The receipt's `execution_result` is checked, so a reverted call is reported as reverted,
   with the hash and the contract's message; a `REFUNDED:` return is reported as a refusal with the GEN on its way back.
 - **Distinct errors** for wallet rejection, wrong network, insufficient GEN, rate limit, unreachable RPC, contract refusal
@@ -148,15 +151,43 @@ Lessons carried over from earlier projects:
 - **The Studio faucet needs the checksummed address**; the Test GEN button checksums it and waits until the balance
   actually changes.
 
+## Working within GenLayer Studio's rate limit
+
+Studio allows **30 requests per minute per IP** for contract reads (`gen_call`) and sends
+(`eth_sendRawTransaction`); receipts, balances and fee estimates use a separate, larger bucket. The app is built so a
+visitor never meets that limit:
+
+| What | Studio calls that count against the 30 |
+|---|---|
+| Opening the page | **0 from the browser.** Pools come from `/api/pools`, a CDN-cached server snapshot (15 s fresh, 45 s stale-while-revalidate) that reads the **whole registry with one `get_pools` call**; GDACS alerts come from `/api/events`, which never touches Studio |
+| Refreshing | 0 from the browser; the server re-reads at most once every 10 s, with one call |
+| One write (donate, trigger, approve, contest, resolve, …) | 3: a pre-flight read of the pool, the send, and one re-read of that pool to update the row |
+| Fallback if the snapshot route is down | 1: the browser reads every pool with one `get_pools` call |
+
+On top of that, the browser keeps its **own sliding-window budget of 24 calls per minute** (`lib/utils/rateBudget.ts`).
+Every contract read and every send takes a slot first; when the budget is spent the call waits for a free slot instead
+of letting Studio answer with a 429, and the transactions panel shows the count (`n/24`) and the wait. Reads that still
+hit a rate-limit error are retried with exponential backoff; sends are never retried automatically, because each attempt
+would prompt the wallet again.
+
 ## Tests
 
-41 direct-mode tests (`tests/direct/test_relief_trigger.py`) with mocked GDACS and USGS responses: pool creation and ten
+48 direct-mode tests (`tests/direct/test_relief_trigger.py`) with mocked GDACS and USGS responses: pool creation and ten
 kinds of invalid terms (all refunded, nothing stored), the minimum pool and donation, each coded term failing on its own
 while the model would have said `MEETS`, unreachable GDACS or USGS → `UNCLEAR`, GDACS/USGS disagreement, all three area
 verdicts, the non-enum LLM guard, input validation, a pending qualifying claim blocking new triggers while a failing one
-is superseded, early-resolution rules for both sides,
-duplicate events, the payout cap, contest rules and window, close before and after coverage, pro-rata reclaim for two
-donors, the rounding remainder going to the last reclaimer, reclaim once, and the views.
+is superseded, duplicate events, the payout cap, close before and after coverage, pro-rata reclaim, the rounding
+remainder, reclaim once, `get_pools`, and the views.
+
+Adversarial governance tests, each trying to bypass the protections:
+
+- a **minority donor** approves and tries to resolve early: refused until donors with a majority approve;
+- a **latecomer** donates 100 GEN while a claim is pending: no say, cannot approve, contest or resolve early;
+- the **recipient** donates 50 GEN before the claim: excluded from the snapshot, cannot approve or contest its own payout;
+- the recipient contests a non-paying claim into a payout: the window restarts, nobody can resolve early, the recipient
+  cannot contest again, and the donors can still contest it back;
+- donors contest once only, and a contest clears earlier approvals;
+- donors cannot contest a dismissal; strangers cannot approve, contest or resolve early.
 
 ```shell
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt

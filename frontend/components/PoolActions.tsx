@@ -5,9 +5,13 @@ import { Loader2 } from "lucide-react";
 import { usePoolWrite } from "@/lib/hooks/useReliefTrigger";
 import { usePickedEvent } from "@/lib/hooks/usePickedEvent";
 import { useWallet } from "@/lib/genlayer/wallet";
+import { useNow } from "@/lib/hooks/useNow";
 import {
   CONTEST_WINDOW_SECONDS,
   HAZARDS,
+  approvalPercent,
+  claimWeight,
+  hasApproved,
   MIN_DONATION_WEI,
   coverageEnded,
   formatGen,
@@ -37,6 +41,7 @@ export function PoolActions({ pool }: { pool: Pool }) {
     }
   }, [picked]);
   const busy = (kind: string) => pending === `${kind}:${pool.id}`;
+  useNow();
 
   if (!isConnected) {
     return <p className="text-sm text-muted-foreground">Connect a wallet to donate, trigger or resolve.</p>;
@@ -46,10 +51,15 @@ export function PoolActions({ pool }: { pool: Pool }) {
   const recipient = sameAddress(address, pool.recipient);
   const ended = coverageEnded(pool);
   const windowLeft = Math.max(0, CONTEST_WINDOW_SECONDS - secondsSince(pool.claim_at));
-  const windowOpen = pool.state === "pending" && !pool.claim_contested && windowLeft > 0;
+  const windowOpen = pool.state === "pending" && windowLeft > 0;
   const meets = pool.claim_verdict === "MEETS";
-  const canContest = windowOpen && (donor || recipient);
-  const canResolve = pool.state === "pending" && (!windowOpen || (meets && donor) || (!meets && recipient));
+  const myWeight = claimWeight(pool, address);
+  const approved = hasApproved(pool, address);
+  // The side a ruling goes against may contest it once: donors (pre-claim, not the recipient)
+  // a payout, the recipient anything else. Each contest restarts the window.
+  const canContest = windowOpen && (meets ? myWeight > 0n && !pool.donor_contested : recipient && !pool.recipient_contested);
+  const canApprove = pool.state === "pending" && meets && windowOpen && myWeight > 0n && !approved;
+  const canResolve = pool.state === "pending" && (!windowOpen || (!meets && recipient));
   const donationWei = parseGen(amount);
   const donationLow = donationWei === null || donationWei < MIN_DONATION_WEI;
   const idValid = /^\d{1,10}$/.test(eventId.trim());
@@ -103,29 +113,49 @@ export function PoolActions({ pool }: { pool: Pool }) {
   }
 
   if (pool.state === "pending") {
+    const pct = approvalPercent(pool);
     return (
-      <div className="space-y-2">
-        {windowOpen && (
+      <div className="space-y-3">
+        {windowOpen ? (
           <p className="text-sm text-muted-foreground">
-            Contest window: <strong>{Math.ceil(windowLeft / 60)} min</strong> left. A donor or the recipient can ask once for an
-            independent re-assessment. A donor can release a payout early; the recipient can dismiss a failed claim early.
+            Contest window: <strong>{Math.ceil(windowLeft / 60)} min</strong> left
+            {pool.claim_contested ? " (restarted by a contest)" : ""}.{" "}
+            {meets
+              ? "Donors who gave before this claim can contest it once, or release it early with a majority of their donations."
+              : "The recipient can contest it once or dismiss it early."}
           </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">The contest window has passed. Anyone can resolve the claim.</p>
         )}
-        {pool.claim_contested && <p className="text-sm text-muted-foreground">Contested once. Anyone can resolve it now.</p>}
+        {meets && windowOpen && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Early-release approvals</span>
+              <span>
+                {formatGen(pool.approval_weight)} of {formatGen(pool.claim_weight_total)} GEN ({pct}%, needs over 50%)
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-green-500" style={{ width: `${Math.min(100, pct)}%` }} />
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
+          {canApprove && btn("approve", `Approve release (your say: ${formatGen(myWeight)} GEN)`, () => write({ kind: "approve", id: pool.id }))}
           {canContest && btn("contest", "Contest (re-assess)", () => write({ kind: "contest", id: pool.id }), "secondary")}
           {canResolve &&
             btn(
               "resolve",
-              meets ? `Release ${formatGen(wei(pool.payout) < wei(pool.balance) ? pool.payout : pool.balance)} GEN` : "Dismiss claim",
+              meets ? `Release ${formatGen(wei(pool.payout) < wei(pool.balance) ? pool.payout : pool.balance)} GEN` : windowOpen ? "Dismiss claim now" : "Dismiss claim",
               () => write({ kind: "resolve", id: pool.id })
             )}
         </div>
-        {!canResolve && (
+        {meets && windowOpen && myWeight === 0n && donor && (
           <p className="text-xs text-muted-foreground">
-            Anyone can resolve after the window. Before that, only a donor can release a payout and only the recipient can dismiss.
+            {recipient ? "As the recipient you have no say in releasing your own payout." : "Your donation came after this claim was opened, so it gives no say in this claim."}
           </p>
         )}
+        {approved && windowOpen && <p className="text-xs text-green-400">You approved this release.</p>}
         {!meets && wei(pool.balance) > 0n && (
           <div className="pt-3 space-y-1">
             <p className="text-xs text-muted-foreground">

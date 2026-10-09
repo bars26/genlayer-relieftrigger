@@ -239,23 +239,80 @@ def test_closed_pool_cannot_be_triggered(direct_vm, direct_deploy, direct_alice,
         contract.trigger(pool_id, "EQ", "1474477")
 
 
-# --- resolving ------------------------------------------------------------------
+# --- resolving and early release ----------------------------------------------
+
+# A fourth account that only appears after a claim is opened.
+LATECOMER = b"\xd4" * 20
 
 
-def test_payout_waits_for_window_unless_a_donor_waives(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+def _donate(direct_vm, contract, pool_id, who, amount):
+    direct_vm.sender = who
+    direct_vm.value = amount
+    result = contract.donate(pool_id)
+    direct_vm.value = 0
+    return result
+
+
+def test_payout_waits_for_window_or_donor_majority(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
     _trigger(direct_vm, contract, pool_id, direct_charlie)
     for who in (direct_charlie, direct_bob):  # a stranger and the recipient cannot rush a payout
         direct_vm.sender = who
-        with direct_vm.expect_revert("The contest window is still open"):
+        with direct_vm.expect_revert("an early payout needs approval from donors holding more than half"):
             contract.resolve(pool_id)
-    direct_vm.sender = direct_alice  # a donor accepts the claim
-    assert contract.resolve(pool_id) == "paid"
+    direct_vm.sender = direct_alice  # the only pre-claim donor holds 100% of the say
+    assert contract.approve_release(pool_id) == "paid"
     pool = contract.get_pool(pool_id)
     assert pool.state == "open"
     assert int(pool.balance) == 6 * GEN and int(pool.total_paid) == 4 * GEN
     assert contract.was_paid(pool_id, "EQ", "1474477") is True
-    assert contract.get_history(pool_id)[-1] == {**contract.get_history(pool_id)[-1], "event": "paid", "amount": str(4 * GEN)}
+    assert [h["event"] for h in contract.get_history(pool_id)[-2:]] == ["approved", "paid"]
+
+
+def test_minority_donor_cannot_release_a_payout(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)  # alice 10 GEN
+    _donate(direct_vm, contract, pool_id, direct_charlie, 5 * GEN)  # charlie 5 GEN, before the claim
+    _trigger(direct_vm, contract, pool_id, direct_bob)
+    pool = contract.get_pool(pool_id)
+    assert int(pool.claim_weight_total) == 15 * GEN
+    direct_vm.sender = direct_charlie
+    assert contract.approve_release(pool_id) == "approved"  # 5 of 15: not a majority
+    with direct_vm.expect_revert("You have already approved this release"):
+        contract.approve_release(pool_id)
+    with direct_vm.expect_revert("an early payout needs approval from donors holding more than half"):
+        contract.resolve(pool_id)
+    assert contract.get_pool(pool_id).state == "pending"
+    direct_vm.sender = direct_alice
+    assert contract.approve_release(pool_id) == "paid"  # 15 of 15
+
+
+def test_late_donation_gives_no_say_in_the_open_claim(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob, amount=2 * GEN, payout=GEN)
+    _trigger(direct_vm, contract, pool_id, direct_bob)
+    # A newcomer donates far more than everyone else while the claim is pending...
+    assert _donate(direct_vm, contract, pool_id, LATECOMER, 100 * GEN) == "donated"
+    assert contract.claim_weight(pool_id, to_hex(LATECOMER)) == "0"
+    # ...and still cannot release the payout, contest it, or resolve it early.
+    with direct_vm.expect_revert("Only a donor who donated before this claim can approve its release"):
+        contract.approve_release(pool_id)
+    with direct_vm.expect_revert("Only a donor who donated before this claim can contest a payout"):
+        contract.contest(pool_id)
+    with direct_vm.expect_revert("an early payout needs approval"):
+        contract.resolve(pool_id)
+    assert int(contract.get_pool(pool_id).claim_weight_total) == 2 * GEN
+
+
+def test_recipient_donations_give_no_say(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
+    _donate(direct_vm, contract, pool_id, direct_bob, 50 * GEN)  # the beneficiary buys "weight" before the claim
+    _trigger(direct_vm, contract, pool_id, direct_bob)
+    assert int(contract.get_pool(pool_id).claim_weight_total) == 10 * GEN
+    assert contract.claim_weight(pool_id, to_hex(direct_bob)) == "0"
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Only a donor who donated before this claim can approve its release"):
+        contract.approve_release(pool_id)
+    with direct_vm.expect_revert("Only a donor who donated before this claim can contest a payout"):
+        contract.contest(pool_id)
 
 
 def test_same_event_cannot_be_paid_twice(direct_vm, direct_deploy, direct_alice, direct_bob):
@@ -281,8 +338,10 @@ def test_failed_claim_is_dismissed(direct_vm, direct_deploy, direct_alice, direc
     contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob, countries="NPL")
     _trigger(direct_vm, contract, pool_id, direct_charlie)
     direct_vm.sender = direct_alice  # a donor cannot dismiss early, only the recipient
-    with direct_vm.expect_revert("The contest window is still open"):
+    with direct_vm.expect_revert("only the recipient can dismiss early"):
         contract.resolve(pool_id)
+    with direct_vm.expect_revert("Only a pending claim that meets the terms can be released"):
+        contract.approve_release(pool_id)
     direct_vm.sender = direct_bob
     assert contract.resolve(pool_id) == "dismissed"
     pool = contract.get_pool(pool_id)
@@ -292,19 +351,65 @@ def test_failed_claim_is_dismissed(direct_vm, direct_deploy, direct_alice, direc
 # --- contesting ---------------------------------------------------------------
 
 
-def test_contest_reassesses_once(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+def test_recipient_cannot_contest_a_payout(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
+    _trigger(direct_vm, contract, pool_id, direct_bob)
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Only a donor who donated before this claim can contest a payout"):
+        contract.contest(pool_id)
+
+
+def test_donor_cannot_contest_a_dismissal(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob, countries="NPL")
+    _trigger(direct_vm, contract, pool_id, direct_charlie)
+    for who in (direct_alice, direct_charlie):
+        direct_vm.sender = who
+        with direct_vm.expect_revert("Only the recipient can contest a claim that does not pay"):
+            contract.contest(pool_id)
+
+
+def test_recipient_contest_restarts_the_window_for_donors(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob, area_terms="central Myanmar")
     assert _trigger(direct_vm, contract, pool_id, direct_charlie, verdict="UNCLEAR") == "UNCLEAR"
-    direct_vm.sender = direct_charlie
-    with direct_vm.expect_revert("Only a donor or the recipient can contest"):
-        contract.contest(pool_id)
+    # The recipient contests and the re-assessment flips the claim to a payout...
     _setup(direct_vm, verdict="MEETS")
-    direct_vm.sender = direct_bob  # the recipient asks for a second opinion
+    direct_vm.sender = direct_bob
     assert contract.contest(pool_id) == "MEETS"
-    with direct_vm.expect_revert("A claim can only be contested once"):
+    pool = contract.get_pool(pool_id)
+    assert pool.recipient_contested and not pool.donor_contested
+    # ...which does not open a shortcut: nobody can resolve the new payout early,
+    direct_vm.sender = direct_charlie
+    with direct_vm.expect_revert("an early payout needs approval"):
+        contract.resolve(pool_id)
+    # the recipient cannot contest again, and the donors can still answer.
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Only a donor who donated before this claim can contest a payout"):
         contract.contest(pool_id)
-    direct_vm.sender = direct_charlie  # after a contest anyone can resolve
-    assert contract.resolve(pool_id) == "paid"
+    _setup(direct_vm, verdict="DOES_NOT_MEET")
+    direct_vm.sender = direct_alice
+    assert contract.contest(pool_id) == "DOES_NOT_MEET"
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("The recipient has already contested this claim"):
+        contract.contest(pool_id)
+    _expire_claim_window(contract, pool_id)
+    direct_vm.sender = direct_charlie  # after the last window anyone settles
+    assert contract.resolve(pool_id) == "dismissed"
+
+
+def test_donors_contest_once_and_a_contest_clears_approvals(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pool_id = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
+    _donate(direct_vm, contract, pool_id, direct_charlie, 5 * GEN)
+    _trigger(direct_vm, contract, pool_id, direct_bob)
+    direct_vm.sender = direct_charlie
+    assert contract.approve_release(pool_id) == "approved"
+    _setup(direct_vm, verdict="MEETS")
+    direct_vm.sender = direct_alice
+    assert contract.contest(pool_id) == "MEETS"
+    pool = contract.get_pool(pool_id)
+    assert int(pool.approval_weight) == 0 and pool.approvals_json == "[]"
+    direct_vm.sender = direct_charlie
+    with direct_vm.expect_revert("Donors have already contested this claim"):
+        contract.contest(pool_id)
 
 
 def test_contest_window_closes(direct_vm, direct_deploy, direct_alice, direct_bob):
@@ -314,6 +419,18 @@ def test_contest_window_closes(direct_vm, direct_deploy, direct_alice, direct_bo
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("The contest window has closed"):
         contract.contest(pool_id)
+
+
+def test_get_pools_reads_the_registry_in_one_call(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract, first = _create(direct_vm, direct_deploy, direct_alice, direct_bob)
+    direct_vm.sender = direct_alice
+    direct_vm.value = 2 * GEN
+    second = contract.create_pool("Second pool", to_hex(direct_bob), "TC", "MEX", "Red", "", 0, "", GEN, "2025-01-01", "2026-12-31")
+    direct_vm.value = 0
+    pools = contract.get_pools(0, 200)
+    assert [p.id for p in pools] == [first, second]
+    assert [p.id for p in contract.get_pools(1, 5)] == [second]
+    assert contract.get_pools(5, 5) == []
 
 
 # --- closing and reclaiming ---------------------------------------------------

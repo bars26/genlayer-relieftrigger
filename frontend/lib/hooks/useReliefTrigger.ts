@@ -3,11 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import ReliefTrigger, { type CreatePoolInput, type TxProgress, type TxResult } from "../contracts/ReliefTrigger";
-import type { GdacsEvent, Pool } from "../contracts/types";
+import { claimWeight, hasApproved, sameAddress, type GdacsEvent, type Pool } from "../contracts/types";
 import { getContractAddress, getStudioUrl } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { ReliefError, classifyError } from "../utils/errors";
-import { mapWithConcurrency } from "../utils/retry";
 import { error, success } from "../utils/toast";
 import { startTx, updateTx, type TxKind } from "./useTxLog";
 
@@ -47,19 +46,8 @@ export function useAllPools() {
         return { pools: body.pools as Pool[], failedIds: (body.failedIds ?? []) as string[], fetchedAt: body.fetchedAt as string | undefined };
       } catch (snapshotErr) {
         if (!contract) throw classifyError(snapshotErr, "read");
-        const ids = await contract.listPools();
-        const rows = await mapWithConcurrency(ids, 2, async (id) => {
-          try {
-            return { id, pool: await contract.getPool(id) };
-          } catch {
-            return { id, pool: null as Pool | null };
-          }
-        });
-        return {
-          pools: rows.filter((r) => r.pool).map((r) => r.pool as Pool),
-          failedIds: rows.filter((r) => !r.pool).map((r) => r.id),
-          fetchedAt: new Date().toISOString(),
-        };
+        // Fallback: the whole registry in one contract call, never one call per pool.
+        return { pools: await contract.getPools(0, 200), failedIds: [], fetchedAt: new Date().toISOString() };
       }
     },
     staleTime: 30_000,
@@ -139,6 +127,7 @@ export type WriteVars =
   | { kind: "create"; input: CreatePoolInput; value: bigint }
   | { kind: "donate"; id: string; value: bigint }
   | { kind: "trigger"; id: string; type: string; eventId: string }
+  | { kind: "approve"; id: string }
   | { kind: "contest"; id: string }
   | { kind: "resolve"; id: string }
   | { kind: "close"; id: string }
@@ -148,6 +137,7 @@ export const WRITE_LABEL: Record<WriteVars["kind"], string> = {
   create: "Create pool",
   donate: "Donate",
   trigger: "Trigger",
+  approve: "Approve release",
   contest: "Contest",
   resolve: "Resolve",
   close: "Close",
@@ -207,11 +197,22 @@ export function usePoolWrite() {
             result = await contract.trigger(vars.id, vars.type, vars.eventId, onProgress);
             note = VERDICT_TEXT[String(result.returned)] ?? "Claim recorded.";
             break;
-          case "contest":
-            if (fresh!.state !== "pending" || fresh!.claim_contested) refuse("This claim can no longer be contested.");
-            result = await contract.contest(vars.id, onProgress);
-            note = `Re-assessed: ${String(result.returned)}.`;
+          case "approve":
+            if (fresh!.state !== "pending" || fresh!.claim_verdict !== "MEETS") refuse("There is no qualifying claim to approve.");
+            if (claimWeight(fresh!, address) === 0n) refuse("Only donors who donated before this claim can approve it.");
+            if (hasApproved(fresh!, address)) refuse("You have already approved this release.");
+            result = await contract.approveRelease(vars.id, onProgress);
+            note = result.returned === "paid" ? "Donors holding a majority approved: the payout was released." : "Approval recorded; more donors need to approve for an early release.";
             break;
+          case "contest": {
+            if (fresh!.state !== "pending") refuse("There is no pending claim to contest.");
+            const meets = fresh!.claim_verdict === "MEETS";
+            if (meets ? fresh!.donor_contested || claimWeight(fresh!, address) === 0n : fresh!.recipient_contested || !sameAddress(fresh!.recipient, address))
+              refuse("You cannot contest this claim (already contested, or the ruling does not go against you).");
+            result = await contract.contest(vars.id, onProgress);
+            note = `Re-assessed: ${String(result.returned)}. The contest window restarted.`;
+            break;
+          }
           case "resolve":
             if (fresh!.state !== "pending") refuse("There is no pending claim to resolve.");
             result = await contract.resolve(vars.id, onProgress);

@@ -40,7 +40,7 @@ const log = [];
 
 const TRANSIENT = /rate limit|Unexpected token '<'|not valid JSON|fetch failed|ECONNRESET|socket hang up|50[234]/i;
 
-async function write(c, who, functionName, args, value = 0n) {
+async function write(c, who, functionName, args, value = 0n, { expectError = false } = {}) {
   const from = c.account.address;
   for (let attempt = 1; ; attempt++) {
     const nonceBefore = BigInt(await rpc("eth_getTransactionCount", [from, "latest"]));
@@ -78,6 +78,13 @@ async function write(c, who, functionName, args, value = 0n) {
       const row = { who, call: `${functionName}(${args.map((a) => (typeof a === "bigint" ? `${Number(a) / 1e18} GEN` : JSON.stringify(a)).slice(0, 40)).join(", ")})`, value: (Number(value) / 1e18).toString(), hash, status: receipt.statusName ?? receipt.status_name ?? "ACCEPTED", exec, returned: typeof returned === "string" ? returned : undefined };
       log.push(row);
       console.log(`${row.who.padEnd(10)} ${row.call.padEnd(52)} ${row.status.padEnd(9)} ${row.exec.padEnd(7)} ${hash}${row.returned?.startsWith?.("REFUNDED") ? "  -> " + row.returned : ""}`);
+      if (expectError) {
+        if (exec !== "ERROR") throw new Error(`${functionName} was expected to be refused but executed with ${exec}`);
+        const msg = typeof first?.result?.payload === "string" ? first.result.payload : "";
+        row.refused = msg;
+        console.log(`  -> refused as designed: ${msg}`);
+        return receipt;
+      }
       if (exec !== "SUCCESS") throw new Error(`${functionName} executed with ${exec}`);
       return receipt;
     } catch (err) {
@@ -157,7 +164,7 @@ const start = { d1: await balance(donor1.address), d2: await balance(donor2.addr
 console.log(`funded: donor-1 ${fmt(start.d1)}, donor-2 ${fmt(start.d2)}, recipient ${fmt(start.r)} GEN\n`);
 
 const first = Number((await read(D1, "list_pools")).length);
-const ids = { myanmar: `pool_${first}`, mexico: `pool_${first + 1}`, rakhine: `pool_${first + 2}` };
+const ids = { myanmar: `pool_${first}`, mexico: `pool_${first + 1}`, rakhine: `pool_${first + 2}`, istanbul: `pool_${first + 3}`, wildfire: `pool_${first + 4}` };
 const today = new Date().toISOString().slice(0, 10);
 
 // Pool A: central Myanmar earthquakes, M7+, 1M+ people exposed, area judged by the validators' LLMs.
@@ -195,12 +202,20 @@ await write(R, "recipient", "resolve", [ids.myanmar]);
 // A: an M5.5 quake two weeks later is also below the trigger. Nobody dismisses it: a claim that
 // pays nothing cannot hold the pool, so the next trigger supersedes it immediately.
 await claim("donor-2", D2, "A  EQ 1477002 (M5.5)", ids.myanmar, "EQ", "1477002");
-// A: the M7.7 Mandalay earthquake qualifies; a donor releases the payout without waiting.
+// A: the M7.7 Mandalay earthquake qualifies. Releasing it before the contest window ends
+// needs donors holding more than half of the donations made before the claim.
 const a = await claim("recipient", R, "A  EQ 1474477 (M7.7 Mandalay)", ids.myanmar, "EQ", "1474477");
-if (a === "MEETS") await write(D1, "donor-1", "resolve", [ids.myanmar]);
+if (a === "MEETS") {
+  await write(R, "recipient", "approve_release", [ids.myanmar], 0n, { expectError: true }); // no say in its own payout
+  await write(R, "recipient", "contest", [ids.myanmar], 0n, { expectError: true }); // nor a contest of it
+  await write(D2, "donor-2", "donate", [ids.myanmar], 20n * GEN); // a large donation after the claim...
+  await write(D2, "donor-2", "approve_release", [ids.myanmar]); // ...still counts only the 5 GEN given before: 5 of 15
+  await write(R, "recipient", "resolve", [ids.myanmar], 0n, { expectError: true }); // a minority cannot release it
+  await write(D1, "donor-1", "approve_release", [ids.myanmar]); // 15 of 15: released at once
+}
 
-// B: an earthquake does not match a hurricane pool; then Hurricane POLO-26 does, a donor contests,
-// the re-assessment agrees and anyone can settle.
+// B: an earthquake does not match a hurricane pool; then Hurricane POLO-26 does. A donor contests,
+// which restarts the window; the re-assessment agrees and a donor majority releases it.
 console.log("");
 await claim("donor-2", D2, "B  EQ 1474477 on a TC pool", ids.mexico, "EQ", "1474477");
 await write(R, "recipient", "resolve", [ids.mexico]);
@@ -208,12 +223,34 @@ const b = await claim("recipient", R, "B  TC 1001325 (POLO-26)", ids.mexico, "TC
 await write(D2, "donor-2", "contest", [ids.mexico]);
 const bp = await read(D1, "get_pool", [ids.mexico]);
 console.log(`  -> contest: ${b} -> ${field(bp, "claim_verdict")}`);
-await write(D2, "donor-2", "resolve", [ids.mexico]);
+await write(D2, "donor-2", "contest", [ids.mexico], 0n, { expectError: true }); // donors contest once
+if (field(bp, "claim_verdict") === "MEETS") await write(D1, "donor-1", "approve_release", [ids.mexico]); // 5 of 8
 
 // C: the facts pass every coded check but the area condition does not hold.
 console.log("");
 const c = await claim("recipient", R, "C  EQ 1474477 vs Rakhine terms", ids.rakhine, "EQ", "1474477");
-if (c !== "MEETS") await write(R, "recipient", "resolve", [ids.rakhine]);
+if (c !== "MEETS") {
+  await write(D1, "donor-1", "contest", [ids.rakhine], 0n, { expectError: true }); // only the recipient contests a refusal
+  await write(R, "recipient", "resolve", [ids.rakhine]); // the recipient may dismiss early
+}
+
+// D: a forward-looking DEMO pool for a Marmara/Istanbul earthquake (real use: money waits for a future disaster).
+console.log("");
+await write(D1, "donor-1", "create_pool", [
+  "DEMO · Istanbul / Marmara earthquake response", recipient.address, "EQ", "TUR", "Red", "7", 1000000,
+  "The earthquake struck the Marmara region of Türkiye, affecting Istanbul, Kocaeli, Sakarya, Yalova, Tekirdağ or Bursa province.",
+  5n * GEN, today, "2036-10-04",
+], 20n * GEN);
+await write(D2, "donor-2", "donate", [ids.istanbul], 10n * GEN);
+
+// E: a DEMO wildfire-recovery pool, tested on the July 2026 forest fires in France (47,910 ha).
+await write(D1, "donor-1", "create_pool", [
+  "DEMO · European wildfire recovery: reforestation and wildlife care", recipient.address, "WF", "ESP,FRA,GRC,ITA,PRT,TUR", "Red", "", 0, "",
+  3n * GEN, "2026-06-01", "2027-12-31",
+], 15n * GEN);
+await write(D2, "donor-2", "donate", [ids.wildfire], 5n * GEN);
+const e = await claim("donor-2", D2, "E  WF 1029628 (France, July 2026)", ids.wildfire, "WF", "1029628");
+if (e === "MEETS") await write(D1, "donor-1", "approve_release", [ids.wildfire]); // 15 of 20
 
 await sleep(5000);
 const end = { d1: await balance(donor1.address), d2: await balance(donor2.address), r: await balance(recipient.address) };

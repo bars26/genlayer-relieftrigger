@@ -3,6 +3,7 @@ import { studionet } from "genlayer-js/chains";
 import type { Pool, TransactionReceipt } from "./types";
 import { ReliefError, classifyError, rawMessage } from "../utils/errors";
 import { withBackoff } from "../utils/retry";
+import { takeSlot } from "../utils/rateBudget";
 
 export type TxStep = "awaiting_wallet" | "submitted" | "retrying" | "accepted";
 
@@ -57,6 +58,7 @@ const WRITE_EFFECT: Record<string, string> = {
   donate: "the donation was not recorded",
   trigger: "no claim was recorded (validators may have failed to read GDACS or to agree)",
   contest: "the contest was not recorded",
+  approve_release: "the approval was not recorded",
   resolve: "nothing was paid or dismissed",
   close: "the pool was not closed",
   reclaim: "nothing was returned",
@@ -90,14 +92,20 @@ class ReliefTrigger {
   }
 
   private read<T>(functionName: string, args: unknown[] = []): Promise<T> {
+    // Every attempt is a gen_call, so each one draws on the client-side rate budget.
     return withBackoff(
-      () => this.client.readContract({ address: this.contractAddress, functionName, args }) as Promise<T>,
+      async () => {
+        await takeSlot();
+        return (await this.client.readContract({ address: this.contractAddress, functionName, args })) as T;
+      },
       { phase: "read", attempts: 5 }
     );
   }
 
   listPools = () => this.read<string[]>("list_pools").then((v) => (Array.isArray(v) ? v : []));
   getPool = (id: string) => this.read<Pool>("get_pool", [id]);
+  /** The whole registry in one contract call (pages of 200). */
+  getPools = (offset = 0, limit = 200) => this.read<Pool[]>("get_pools", [offset, limit]).then((v) => (Array.isArray(v) ? v : []));
   wasPaid = async (id: string, type: string, eventId: string) =>
     Boolean(await this.read<boolean>("was_paid", [id, type, eventId]));
   getContribution = (id: string, donor: string) => this.read<string>("get_contribution", [id, donor]);
@@ -122,6 +130,9 @@ class ReliefTrigger {
   }
   trigger(id: string, type: string, eventId: string, onProgress?: (p: TxProgress) => void) {
     return this.write("trigger", [id, type, eventId], 0n, onProgress);
+  }
+  approveRelease(id: string, onProgress?: (p: TxProgress) => void) {
+    return this.write("approve_release", [id], 0n, onProgress);
   }
   contest(id: string, onProgress?: (p: TxProgress) => void) {
     return this.write("contest", [id], 0n, onProgress);
@@ -148,6 +159,9 @@ class ReliefTrigger {
     value: bigint,
     onProgress?: (p: TxProgress) => void
   ): Promise<TxResult> {
+    // A send counts against the same per-IP bucket as contract reads; wait for a slot first
+    // rather than let Studio answer with a rate-limit error after the wallet prompt.
+    await takeSlot((ms) => onProgress?.({ step: "retrying", message: `Waiting ${Math.ceil(ms / 1000)}s to stay under GenLayer Studio's 30 requests per minute.` }));
     onProgress?.({ step: "awaiting_wallet", message: "Approve the transaction in your wallet." });
     let txHash: string;
     try {

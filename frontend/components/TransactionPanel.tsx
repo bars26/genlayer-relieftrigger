@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, CheckCircle2, Copy, ExternalLink, Loader2 } fr
 import { useReliefContract } from "@/lib/hooks/useReliefTrigger";
 import { useTxLog, updateTx, type TxEntry } from "@/lib/hooks/useTxLog";
 import { EXPLORER_TX_URL } from "@/lib/utils/errors";
+import { BUDGET, useRateBudget } from "@/lib/utils/rateBudget";
 import { Button } from "./ui/button";
 
 const STATE_LABEL: Record<TxEntry["state"], string> = {
@@ -19,6 +20,7 @@ const KIND_LABEL: Record<TxEntry["kind"], string> = {
   create: "Create pool",
   donate: "Donate",
   trigger: "Trigger",
+  approve: "Approve release",
   contest: "Contest",
   resolve: "Resolve",
   close: "Close",
@@ -130,6 +132,7 @@ function TxRow({ tx }: { tx: TxEntry }) {
 /** Transaction log: hash, consensus status, contract outcome and the exact failure for every write. */
 export function TransactionPanel() {
   const entries = useTxLog();
+  const [used, waitMs] = useRateBudget().split("|").map(Number);
 
   return (
     <div className="brand-card p-6 space-y-3">
@@ -142,6 +145,10 @@ export function TransactionPanel() {
           Every write shows up here with its hash and status. <strong>ACCEPTED</strong> means validators
           reached consensus on the transaction; the contract outcome (SUCCESS or ERROR) is shown separately because a
           reverted call is still ACCEPTED.
+        </p>
+        <p className="text-xs text-muted-foreground mt-2" title="GenLayer Studio allows 30 contract reads and sends per minute per IP; this app stays under its own budget.">
+          Studio requests from this tab in the last minute: <strong className="text-foreground">{used}/{BUDGET}</strong>
+          {waitMs > 0 && <span className="text-yellow-300"> · next slot in {Math.ceil(waitMs / 1000)}s</span>}
         </p>
       </div>
       {entries.length === 0 ? (
