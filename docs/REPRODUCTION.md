@@ -1,141 +1,117 @@
 # Reproduction log
 
-Live run of `scripts/demo.mjs` on GenLayer Studio, 2026-10-04, against contract
-[`0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4`](https://explorer-studio.genlayer.com/address/0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4).
-The deployed code is byte-identical to `contracts/relief_trigger.py` (`node scripts/verify-code.mjs 0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4` prints
-`identical (24820 bytes)`). The raw run, with every hash, is in [`demo-run.json`](demo-run.json).
+Live run of `scripts/demo.mjs` on GenLayer Studio, 2026-10-09/10 (UTC), against contract
+[`0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab`](https://explorer-studio.genlayer.com/address/0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab). The deployed code is byte-identical to `contracts/relief_trigger.py`
+(`node scripts/verify-code.mjs 0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab` prints `identical (30474 bytes)`). The raw run, with every hash, is in
+[`demo-run.json`](demo-run.json).
+
+This deployment adds the donor-majority release and side-specific contests requested in review; earlier deployments
+(`0x6C4f01974d6059c1aA9Bfb0Bb9B353981e58f1B4` and before) used the previous rules and are superseded.
 
 Accounts (throwaway, funded from the Studio faucet):
 
 | Role | Address |
 |---|---|
-| donor-1 | `0x69C1E3cB2837b688eebe9436cE8341D3e0a92Fa7` |
-| donor-2 | `0xeAc52A43F88866328F8A80D1D47B03B6782EE6cE` |
-| recipient (the responder) | `0xb1eEAF03DD62b9890dB2393Da58e05C632779e7d` |
+| donor-1 | `0xFEd27A839CC8C294da224a9ad7A86aBcc6FE209A` |
+| donor-2 | `0x11893435C1487e4435Be855db6289972ab00e52e` |
+| recipient (the responder) | `0x3139d8B50C7B3425Ec28EAf8ef139C55A29c6AAD` |
 
 ## Pools
 
-| Pool | Terms | Funding |
+| Pool | Terms | Funding before any claim |
 |---|---|---|
-| `pool_0` Central Myanmar earthquake response | EQ · MMR · Orange+ · M ≥ 7 · ≥ 1,000,000 exposed · 2025-01-01 → 2026-12-31 · area: *"The earthquake struck the Mandalay or Sagaing Region of central Myanmar."* · payout 4 GEN | donor-1 10, donor-2 5 (+ a 0.05 GEN donation that is refunded) |
-| `pool_1` Mexico Pacific hurricane fund | TC · MEX · Red · wind ≥ 180 km/h · 2026-06-01 → 2026-10-04 · payout 2 GEN | donor-1 5, donor-2 3 |
-| `pool_2` Rakhine coast earthquake response | EQ · MMR · Orange+ · M ≥ 6 · area: *"The earthquake struck Rakhine State on Myanmar's western coast."* · payout 1 GEN | donor-1 2 |
+| `pool_0` Central Myanmar earthquake response | EQ · MMR · Orange+ · M ≥ 7 · ≥ 1,000,000 exposed · area: *"The earthquake struck the Mandalay or Sagaing Region of central Myanmar."* · payout 4 GEN | donor-1 10, donor-2 5 (a 0.05 GEN donation was refunded) |
+| `pool_1` Mexico Pacific hurricane fund | TC · MEX · Red · wind ≥ 180 km/h · events 2026-06-01 → 2026-10-09 · payout 2 GEN | donor-1 5, donor-2 3 |
+| `pool_2` Rakhine coast earthquake response | EQ · MMR · Orange+ · M ≥ 6 · area: *"Rakhine State on Myanmar's western coast."* · payout 1 GEN | donor-1 2 |
+| `pool_3` DEMO · Istanbul / Marmara earthquake response | EQ · TUR · Red · M ≥ 7 · ≥ 1,000,000 exposed · Marmara area condition · 2026 → 2036 · payout 5 GEN | donor-1 20, donor-2 10 |
+| `pool_4` DEMO · European wildfire recovery | WF · ESP, FRA, GRC, ITA, PRT, TUR · Red · payout 3 GEN | donor-1 15, donor-2 5 |
 
-## Claims, and what validators read
+## Claims, rulings and who released them
 
-| Pool | GDACS event | What validators read (GDACS, USGS) | Verdict | Reason code | Resolution |
-|---|---|---|---|---|---|
-| `pool_0` | [EQ 1474479](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474479) | Red · MMR · 2025-03-28 · M6.7 · USGS M6.7 | DOES_NOT_MEET | `severity` (6.7 < 7) | recipient dismisses early |
-| `pool_0` | [EQ 1477002](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1477002) | Red · MMR · 2025-04-13 · M5.5 · USGS M5.3 | DOES_NOT_MEET | `severity` (5.5 < 7) | nobody dismisses it; the next trigger **supersedes** it at once (a claim that pays nothing cannot hold the pool) |
-| `pool_0` | [EQ 1474477](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474477) | Red · MMR · 2025-03-28 · M7.7 · USGS M7.7 "2025 Mandalay, Burma (Myanmar) Earthquake" · 17,235,221 exposed | **MEETS** | `area` (LLM: Mandalay/Sagaing) | donor-1 releases early → **4 GEN to the recipient** |
-| `pool_1` | [EQ 1474477](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474477) | an earthquake, on a cyclone pool | DOES_NOT_MEET | `hazard` | recipient dismisses early |
-| `pool_1` | [TC 1001325](https://www.gdacs.org/report.aspx?eventtype=TC&eventid=1001325) (POLO-26) | Red · MEX · 2026-09-21 · 287 km/h | **MEETS** | `met` | donor-2 contests → re-assessed **MEETS** → **2 GEN to the recipient** |
-| `pool_2` | [EQ 1474477](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474477) | same facts as above; every coded term passes | DOES_NOT_MEET | `area` (LLM: not Rakhine) | recipient dismisses early |
+| Pool | GDACS event | What validators read | Verdict | How it ended |
+|---|---|---|---|---|
+| `pool_0` | [EQ 1474479](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474479) | Red · MMR · M6.7 · USGS M6.7 | DOES_NOT_MEET (`severity`) | the recipient dismissed it early (only it can) |
+| `pool_0` | [EQ 1477002](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1477002) | Red · MMR · M5.5 · USGS M5.3 | DOES_NOT_MEET (`severity`) | superseded by the next trigger |
+| `pool_0` | [EQ 1474477](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474477) | Red · MMR · M7.7 · USGS M7.7 · 17,235,221 exposed | **MEETS** (`area`) | see the governance walk-through below: released by donors holding 15 of 15 GEN → **4 GEN to the recipient** |
+| `pool_1` | [EQ 1474477](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474477) | an earthquake on a cyclone pool | DOES_NOT_MEET (`hazard`) | dismissed by the recipient |
+| `pool_1` | [TC 1001325](https://www.gdacs.org/report.aspx?eventtype=TC&eventid=1001325) POLO-26 | Red · MEX · 287 km/h | **MEETS** (`met`) | donor-2 contested (re-assessed MEETS, window restarted); donor-1 (5 of 8 GEN) approved → **2 GEN to the recipient** |
+| `pool_2` | [EQ 1474477](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1474477) | every coded term passes | DOES_NOT_MEET (`area`) | the recipient dismissed it |
+| `pool_4` | [WF 1029628](https://www.gdacs.org/report.aspx?eventtype=WF&eventid=1029628) France, July 2026 | Red · FRA · 47,910 ha | **MEETS** (`met`) | donor-1 (15 of 20 GEN) approved → **3 GEN to the recipient** |
 
-The same M7.7 earthquake pays the Mandalay pool and is refused by the Rakhine pool: the coded checks are identical, only
-the validators' judgement of the area condition differs.
+## Governance walk-through on `pool_0` (the protections from the review, live)
 
-## Balances
+Once the M7.7 claim was open, the snapshot gave donor-1 a say of 10 GEN and donor-2 5 GEN (15 GEN in total; the recipient
+none):
 
-| Account | Before | After | Arithmetic |
+1. The **recipient** tried to approve the release of its own payout: refused.
+2. The **recipient** tried to contest the payout: refused (contests of a payout belong to donors).
+3. donor-2 then **donated another 20 GEN** while the claim was pending, and approved: the approval counted only the
+   5 GEN donated before the claim (5 of 15, not a majority).
+4. The recipient tried to **resolve** with that minority approval: refused.
+5. donor-1 approved (15 of 15): the payout was released at once.
+
+On `pool_1`, donor-2's contest restarted the window and a second donor contest was refused; on `pool_2`, a donor's
+attempt to contest a dismissal was refused. Every refusal is a recorded transaction:
+
+| Who | Call | Contract message | Tx |
 |---|---|---|---|
-| donor-1 | 100.00 | 83.00 | −10 −5 −2 |
-| donor-2 | 100.00 | 92.00 | −5 −3 (the 0.05 GEN donation came back) |
-| recipient | 1.00 | **7.00** | +4 (Myanmar) +2 (POLO-26) |
-| contract | 0 | 19.00 | pool_0 11 + pool_1 6 + pool_2 2 |
+| recipient | `approve_release` on `pool_0` | Only a donor who donated before this claim can approve its release | [`0xe5799d55…d542be`](https://explorer-studio.genlayer.com/tx/0xe5799d554d61d3c38cd3858636352e18f3f9be35f240b34f40618d5b58d542be) |
+| recipient | `contest` on `pool_0` | Only a donor who donated before this claim can contest a payout | [`0xbbca8741…3d4f73`](https://explorer-studio.genlayer.com/tx/0xbbca874183757a88fcc5e8b0f3ad488c02a415bbb657ee96b989cf38153d4f73) |
+| recipient | `resolve` on `pool_0` | The contest window is still open; an early payout needs approval from donors holding more than half of the pre-claim donations | [`0x1891232b…cf4d61`](https://explorer-studio.genlayer.com/tx/0x1891232b6d64f67936dc8fcdd1883668297cff4d6b15a9090e550b4840cf4d61) |
+| donor-2 | `contest` on `pool_1` | Donors have already contested this claim | [`0xc2ecb581…001667`](https://explorer-studio.genlayer.com/tx/0xc2ecb581363d97a5443fbf4ffee33c5b0b50fe98bdd571974ea8882b4e001667) |
+| donor-1 | `contest` on `pool_2` | Only the recipient can contest a claim that does not pay | [`0x3f012207…7e8b67`](https://explorer-studio.genlayer.com/tx/0x3f0122070b4aa1af77e7b2dec371d9d4f2a42a75348b9e27d698174a817e8b67) |
 
-Views after the run: `was_paid(pool_0, EQ, 1474477) = true`, `was_paid(pool_0, EQ, 1474479) = false`.
+## Close and pro-rata reclaim
 
-## Every transaction
-
-All ACCEPTED by validator consensus with contract execution SUCCESS.
-
-| Who | Call | GEN | Status | Execution | Returned | Tx |
-|---|---|---|---|---|---|---|
-| donor-1 | `create_pool("Central Myanmar earthquake response", "0xb1eEAF03DD62b9890dB2393Da58e05C632779, "EQ", "MMR", "Orange", "7", 1000000, "The earthquake struck the Mandalay or S, 4 GEN, "2025-01-01", "2026-12-31")` | 10 | ACCEPTED | SUCCESS | pool_0 | [`0x2acc3490…4b28af`](https://explorer-studio.genlayer.com/tx/0x2acc3490ad432a293956c3216358aa0f679f347a80c4df4a16e478c6774b28af) |
-| donor-2 | `donate("pool_0")` | 5 | ACCEPTED | SUCCESS | donated | [`0x8ea5edb7…3ea1d2`](https://explorer-studio.genlayer.com/tx/0x8ea5edb79b42e792707b9ebe8775fbaa7a92559473f5cb30737c3f0f8f3ea1d2) |
-| donor-2 | `donate("pool_0")` | 0.05 | ACCEPTED | SUCCESS | REFUNDED: A donation must be at least 0.1 GEN | [`0xeb072c2e…25f7c9`](https://explorer-studio.genlayer.com/tx/0xeb072c2e0b9ef91b8a75b209e72f048753cd53ad73d567c003dd5b624825f7c9) |
-| donor-1 | `create_pool("Mexico Pacific hurricane fund", "0xb1eEAF03DD62b9890dB2393Da58e05C632779, "TC", "MEX", "Red", "180", 0, "", 2 GEN, "2026-06-01", "2026-10-04")` | 5 | ACCEPTED | SUCCESS | pool_1 | [`0xa27bdf39…62c4e7`](https://explorer-studio.genlayer.com/tx/0xa27bdf3988dee3b4ee3602d05bb15b6234f29777afe89f04242c8e825762c4e7) |
-| donor-2 | `donate("pool_1")` | 3 | ACCEPTED | SUCCESS | donated | [`0x1e74ef68…3eaacd`](https://explorer-studio.genlayer.com/tx/0x1e74ef68901dbe1fe87d233f0c55c8695e3d14f53a3bd8b65206b4f6053eaacd) |
-| donor-1 | `create_pool("Rakhine coast earthquake response", "0xb1eEAF03DD62b9890dB2393Da58e05C632779, "EQ", "MMR", "Orange", "6", 0, "The earthquake struck Rakhine State on , 1 GEN, "2025-01-01", "2026-12-31")` | 2 | ACCEPTED | SUCCESS | pool_2 | [`0x0c101d57…a5e690`](https://explorer-studio.genlayer.com/tx/0x0c101d57973535f7887b8982b8929174731b77d419d61f887ed1f2fd9aa5e690) |
-| recipient | `trigger("pool_0", "EQ", "1474479")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0x954539f7…c92bf9`](https://explorer-studio.genlayer.com/tx/0x954539f736cf001629ac5fabe8b0d1da09fcf36dee230e785babf0616fc92bf9) |
-| recipient | `resolve("pool_0")` |  | ACCEPTED | SUCCESS | dismissed | [`0x9eb7a599…8fa1ba`](https://explorer-studio.genlayer.com/tx/0x9eb7a5998f90ab1563216c3d81c3679af273862b059fb92ee9b8edb8408fa1ba) |
-| donor-2 | `trigger("pool_0", "EQ", "1477002")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xdedc24d7…6266cd`](https://explorer-studio.genlayer.com/tx/0xdedc24d77225729929a4e29d1397153578e7695843d5dbf04bb64799e56266cd) |
-| recipient | `trigger("pool_0", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | MEETS | [`0x0bd593a7…c8287c`](https://explorer-studio.genlayer.com/tx/0x0bd593a76e05ed9643116798d818e620b03e924b89ad86b419bb1d4cfbc8287c) |
-| donor-1 | `resolve("pool_0")` |  | ACCEPTED | SUCCESS | paid | [`0x3c7ab556…c1eb66`](https://explorer-studio.genlayer.com/tx/0x3c7ab556629a7ff7da252ae8e90a9f2b8abcbe4752f3aec4b9884a0e3fc1eb66) |
-| donor-2 | `trigger("pool_1", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0x60bcd9e6…2c9fa7`](https://explorer-studio.genlayer.com/tx/0x60bcd9e64a6cb886d0c930889629369d288582068d9f835a95a253b00f2c9fa7) |
-| recipient | `resolve("pool_1")` |  | ACCEPTED | SUCCESS | dismissed | [`0x2c9a060c…5b291b`](https://explorer-studio.genlayer.com/tx/0x2c9a060cbb70a01301b1241e3d96442cd74f52b136e20b479c65854a4c5b291b) |
-| recipient | `trigger("pool_1", "TC", "1001325")` |  | ACCEPTED | SUCCESS | MEETS | [`0x0f52a5a2…e9f059`](https://explorer-studio.genlayer.com/tx/0x0f52a5a25e447fcf74aeb43e9ab0f6809e54053a365c67a9b440b3ae8ae9f059) |
-| donor-2 | `contest("pool_1")` |  | ACCEPTED | SUCCESS | MEETS | [`0x86733b88…68a07f`](https://explorer-studio.genlayer.com/tx/0x86733b88addbedcd446a57409dff4a894e2c8fd5bb49ad5b22cd61196668a07f) |
-| donor-2 | `resolve("pool_1")` |  | ACCEPTED | SUCCESS | paid | [`0x2fc99246…97ca33`](https://explorer-studio.genlayer.com/tx/0x2fc99246abf21f673066f31f396060443909d240b6b5ff1d838858b5ca97ca33) |
-| recipient | `trigger("pool_2", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xa94badf4…36848a`](https://explorer-studio.genlayer.com/tx/0xa94badf4558948b7227ccc46a80c553407a000f8bc6fd0838f53bd1d2a36848a) |
-| recipient | `resolve("pool_2")` |  | ACCEPTED | SUCCESS | dismissed | [`0x4fd9f753…6db6dd`](https://explorer-studio.genlayer.com/tx/0x4fd9f7532bb188ac2ae1775dc447e7acf03787766b3bf8dde96be0b6a76db6dd) |
-
-## A forward-looking pool
-
-The pools above prove the mechanism on past disasters. Real use is the other way round: the money waits for a disaster
-that has not happened yet. `pool_3` is a labelled DEMO of that, for the long-expected North Anatolian Fault earthquake
-near Istanbul:
-
-| Term | Value |
-|---|---|
-| Name | DEMO · Istanbul / Marmara earthquake response |
-| Hazard, country, alert | EQ · TUR · Red |
-| Magnitude, exposure | M ≥ 7 (GDACS and USGS within 0.3) · ≥ 1,000,000 people in MMI VII+ shaking |
-| Area (LLM) | *"The earthquake struck the Marmara region of Türkiye, affecting Istanbul, Kocaeli, Sakarya, Yalova, Tekirdağ or Bursa province."* |
-| Coverage | 2026-10-04 → 2036-10-04 |
-| Payout | 5 GEN per qualifying event, to the demo responder wallet `0xb1eEAF03DD62b9890dB2393Da58e05C632779e7d` |
-| Funding | donor-1 20 GEN ([`0x9e4ce431…912465`](https://explorer-studio.genlayer.com/tx/0x9e4ce431bdb8d40cc586862dde0df3f6b06f5329d9525237d3ca1911aa912465)), donor-2 10 GEN ([`0xac78846d…c34c86`](https://explorer-studio.genlayer.com/tx/0xac78846df2e5efcfe36e9042da1bde4d430195dfa3b2de5cc4f9f39f5ee34c86)) |
-
-GDACS alert levels already weigh exposure and vulnerability, which is why a Red-alert term separates disasters that
-overwhelm local capacity from strong but well-absorbed earthquakes. For scale: the 2023 Kahramanmaraş earthquake is GDACS
-[EQ 1357372](https://www.gdacs.org/report.aspx?eventtype=EQ&eventid=1357372), Red, M7.8 (USGS M7.8), about 3.7 million
-people exposed. It would not trigger `pool_3` (it predates the coverage and struck south-east Türkiye, not Marmara); a
-pool written for that region before February 2023 would have paid within the hour.
-
-The responder wallet is a throwaway demo address. ReliefTrigger does not represent any real organisation.
-
-## Wildfire
-
-`pool_4`, a labelled DEMO for forest-fire recovery (reforestation and wildlife care), shows the same mechanism on a
-different hazard. Terms: WF · ESP, FRA, GRC, ITA, PRT, TUR · Red alert · 3 GEN per qualifying fire · fires starting
-2026-06-01 to 2027-12-31 (the start is set before this summer so a real fire can be used as the test).
-
-| Step | Tx | Result |
-|---|---|---|
-| donor-1 creates the pool with 15 GEN | [`0xefbf3184…acc08`](https://explorer-studio.genlayer.com/tx/0xefbf318490de42528a51e23779f3cb23f6062f7753f9fcbd5e00e057b90acc08) | `pool_4` |
-| donor-2 donates 5 GEN | [`0x9852ab31…9eae2`](https://explorer-studio.genlayer.com/tx/0x9852ab31e27ced31fa0ddee9d30849739dc6d9fb929fd10e41bb1176de19eae2) | donated |
-| donor-2 triggers with [WF 1029628](https://www.gdacs.org/report.aspx?eventtype=WF&eventid=1029628), the July 2026 forest fires in France | [`0x01d80ead…21c10`](https://explorer-studio.genlayer.com/tx/0x01d80ead9b9309997adaba57e6e3ee1ee3a50627fdeb6933868cc6c34e121c10) | validators read Red · FRA · 2026-07-22 · 47,910 ha burned → **MEETS** (`met`) |
-| donor-1 releases the payout | [`0x043019f6…e9398`](https://explorer-studio.genlayer.com/tx/0x043019f6e222e21d5595ceb1f3bef809b6260b92be70dd3630f06f4f780e9398) | paid, FINALIZED; the responder wallet went 7 → **10 GEN** |
-
-GDACS reports a wildfire's burned area in hectares. In this version a minimum severity applies to earthquakes and
-cyclones only, so a wildfire pool sizes its trigger with the GDACS alert level (which already reflects burned area and
-people affected). A hectare threshold and splitting one payout across several purpose wallets (reforestation, wildlife
-care, affected families) are the planned next step.
-
-## Wallet test from the app
-
-Triggered from the live app with MetaMask (wallet `0x4F80B5c475fcEd34fc9A07FfCcF39E1Adc1406bf`), picking Hurricane
-POLO-26 from the "Recent GDACS alerts" panel and triggering the Rakhine earthquake pool (`pool_2`):
-[`0xe6001787…1cd1aa6`](https://explorer-studio.genlayer.com/tx/0xe600178704082dad5a86b4afc935d195add91cae1247c66a2b9a066b61cd1aa6),
-FINALIZED, execution SUCCESS. Validators read TC 1001325 (Red, MEX, 287 km/h) and returned `DOES_NOT_MEET` with reason
-code `hazard`: a cyclone cannot pay an earthquake pool. The claim pays nothing, so the next trigger on `pool_2`
-supersedes it.
-
-## Close and reclaim
-
-`pool_1`'s coverage ended on 2026-10-04 (UTC). On 2026-10-05 it was closed with 7 GEN left of 9 GEN donated (donor-1 5,
-donor-2 3, and 1 GEN donated from MetaMask during the wallet test), and each donor reclaimed their pro-rata share:
+`pool_1` (Mexico) covered events until 2026-10-09; on 2026-10-10 (UTC) it was closed with 6 GEN left of 8 GEN donated (donor-1 5,
+donor-2 3), and each donor reclaimed their pro-rata share: donor-1 5/8 of 6 = 3.75 GEN, donor-2 the rest, 2.25 GEN (the
+last reclaimer also takes any rounding remainder). The pool's balance is 0 and the contract holds 80 GEN, the four other pools.
 
 | Step | Tx | Amount |
 |---|---|---|
-| donor-1 closes `pool_1` | [`0x433b3631…11462c`](https://explorer-studio.genlayer.com/tx/0x433b3631e23b0ec84bedf2f2626c7ada96d04b6a040493b2818468c56211462c) | closing balance 7 GEN |
-| donor-1 reclaims (5/9) | [`0xe1481e98…2a5d99`](https://explorer-studio.genlayer.com/tx/0xe1481e982fb0eef4c69d6225c605e58c1756cc9b4fd1945b03d23ea1d02a5d99) | 3.888888888888888888 GEN |
-| donor-2 reclaims (3/9) | [`0x3158d15c…d092a8`](https://explorer-studio.genlayer.com/tx/0x3158d15ca2ded908ad683419a95ec622fe914019a14d6aa081f444d513d092a8) | 2.333333333333333333 GEN |
-| MetaMask donor reclaims from the app (1/9, last, so it also takes the rounding remainder) | [`0xedb46c65…acf7f`](https://explorer-studio.genlayer.com/tx/0xedb46c65a02e384b80c34d0f2b17a8e20871b2fecafae762557865946ebacf7f) | 0.777777777777777779 GEN |
+| donor-1 `close` | [`0x5cdefee0…fe8e25`](https://explorer-studio.genlayer.com/tx/0x5cdefee031ba525df74578ff9b525b834aeb5027af419cbeff6afce32ffe8e25) |  |
+| donor-1 `reclaim` | [`0x66fb5e70…ab0adc`](https://explorer-studio.genlayer.com/tx/0x66fb5e7049c1c5082cfa998d0051efec75f39612764bce2f3efba3d571ab0adc) | 3750000000000000000 |
+| donor-2 `reclaim` | [`0x8224fe93…40c1de`](https://explorer-studio.genlayer.com/tx/0x8224fe93d725c0c3d822ba46970f2616a859f5583a7a22aacb8f1e183340c1de) | 2250000000000000000 |
 
-The three shares add up to exactly 7.000000000000000000 GEN and the pool balance is 0. A second `close` sent by mistake
-([`0xe454f88b…dbc21`](https://explorer-studio.genlayer.com/tx/0xe454f88bb0c7b63d655635bd534d42ecadb5ab2364534900522457a3cefdbc21),
-no value) was rejected with "The pool is already closed" and changed nothing.
+## Balances
 
-After this the contract holds 62 GEN: `pool_0` 13 + `pool_2` 2 + `pool_3` 30 + `pool_4` 17.
+| Account | Before | After |
+|---|---|---|
+| recipient | 1.00 | **10.00** (+4 Myanmar, +2 POLO-26, +3 France wildfire) |
+| contract | 0 | **86.00** after the claims (pool_0 31 + pool_1 6 + pool_2 2 + pool_3 30 + pool_4 17), then 80.00 after pool_1 was closed and reclaimed |
+
+## Every transaction
+
+| Who | Call | GEN | Status | Execution | Returned | Tx |
+|---|---|---|---|---|---|---|
+| donor-1 | `create_pool("Central Myanmar earthquake response", "0x3139d8B50C7B3425Ec28EAf8ef139C55A29c6, "EQ", "MMR", "Orange", "7", 1000000, "The earthquake struck the Mandalay or S, 4 GEN, "2025-01-01", "2026-12-31")` | 10 | ACCEPTED | SUCCESS | pool_0 | [`0x51f3fc13…c7b10d`](https://explorer-studio.genlayer.com/tx/0x51f3fc13f34a9493634f6dfbe0fccd1316356c78a3f8ea7ce3284da579c7b10d) |
+| donor-2 | `donate("pool_0")` | 5 | ACCEPTED | SUCCESS | donated | [`0xd0213823…1ec77e`](https://explorer-studio.genlayer.com/tx/0xd02138235b4a585d1fe8c93a74089a7a618d5952fa33b9939058ba7ddb1ec77e) |
+| donor-2 | `donate("pool_0")` | 0.05 | ACCEPTED | SUCCESS | REFUNDED: A donation must be at least 0.1 GEN | [`0xd528c937…a19dc6`](https://explorer-studio.genlayer.com/tx/0xd528c93729660d5badd13172c325ea9706edc7f2279ff39c34cfa130aca19dc6) |
+| donor-1 | `create_pool("Mexico Pacific hurricane fund", "0x3139d8B50C7B3425Ec28EAf8ef139C55A29c6, "TC", "MEX", "Red", "180", 0, "", 2 GEN, "2026-06-01", "2026-10-09")` | 5 | ACCEPTED | SUCCESS | pool_1 | [`0x6bde1f56…87cdbf`](https://explorer-studio.genlayer.com/tx/0x6bde1f56a7c0bf5b3740e8c691f173a390da04a07f9596a2768491d0be87cdbf) |
+| donor-2 | `donate("pool_1")` | 3 | ACCEPTED | SUCCESS | donated | [`0x1dc2cb9e…df2462`](https://explorer-studio.genlayer.com/tx/0x1dc2cb9ed52a41a144f5e16c706782a4fb792bae19bfef96c0b35dfccbdf2462) |
+| donor-1 | `create_pool("Rakhine coast earthquake response", "0x3139d8B50C7B3425Ec28EAf8ef139C55A29c6, "EQ", "MMR", "Orange", "6", 0, "The earthquake struck Rakhine State on , 1 GEN, "2025-01-01", "2026-12-31")` | 2 | ACCEPTED | SUCCESS | pool_2 | [`0x8a9f8046…5305bf`](https://explorer-studio.genlayer.com/tx/0x8a9f804601fd3f7a45fd883e316dcee54d84d044cc86f38e117e0188585305bf) |
+| recipient | `trigger("pool_0", "EQ", "1474479")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xe2b32dfb…828683`](https://explorer-studio.genlayer.com/tx/0xe2b32dfbd4569f54fa4bf1fa6fc9a2b2a9dc8c69d7d410a139f3a8d582828683) |
+| recipient | `resolve("pool_0")` |  | ACCEPTED | SUCCESS | dismissed | [`0xc038d61e…bac169`](https://explorer-studio.genlayer.com/tx/0xc038d61e0b549117d20f2d1ee45754341f2272fcdcd59c1d8cdd15b530bac169) |
+| donor-2 | `trigger("pool_0", "EQ", "1477002")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xfe0bbdd1…a33fca`](https://explorer-studio.genlayer.com/tx/0xfe0bbdd1d591a7ebbce1218f6f3c5b48c12c8423f9822fb35966a837f4a33fca) |
+| recipient | `trigger("pool_0", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | MEETS | [`0x81246dc7…b3e6a1`](https://explorer-studio.genlayer.com/tx/0x81246dc72414fea733e7b62699c7ca754e24b3be4335348815e154b71eb3e6a1) |
+| recipient | `approve_release("pool_0")` |  | ACCEPTED | ERROR | refused: Only a donor who donated before this claim can approve its release | [`0xe5799d55…d542be`](https://explorer-studio.genlayer.com/tx/0xe5799d554d61d3c38cd3858636352e18f3f9be35f240b34f40618d5b58d542be) |
+| recipient | `contest("pool_0")` |  | ACCEPTED | ERROR | refused: Only a donor who donated before this claim can contest a payout | [`0xbbca8741…3d4f73`](https://explorer-studio.genlayer.com/tx/0xbbca874183757a88fcc5e8b0f3ad488c02a415bbb657ee96b989cf38153d4f73) |
+| donor-2 | `donate("pool_0")` | 20 | ACCEPTED | SUCCESS | donated | [`0x0250c880…2299ff`](https://explorer-studio.genlayer.com/tx/0x0250c880c533e62220e2db373a3d97db1d461bcec7367782ab94a7f17d2299ff) |
+| donor-2 | `approve_release("pool_0")` |  | ACCEPTED | SUCCESS | approved | [`0x5eada37c…973166`](https://explorer-studio.genlayer.com/tx/0x5eada37cf84bc4d8c389db3355c03f46d102fed17e4ca0b8b0b05727af973166) |
+| recipient | `resolve("pool_0")` |  | ACCEPTED | ERROR | refused: The contest window is still open; an early payout needs approval from donors holding more than half of the pre-claim donations | [`0x1891232b…cf4d61`](https://explorer-studio.genlayer.com/tx/0x1891232b6d64f67936dc8fcdd1883668297cff4d6b15a9090e550b4840cf4d61) |
+| donor-1 | `approve_release("pool_0")` |  | ACCEPTED | SUCCESS | paid | [`0x0a57a7cc…5391cf`](https://explorer-studio.genlayer.com/tx/0x0a57a7cc010d30f9c7840811cd78e74bee3ad9b5e70e40e9d6c64963fe5391cf) |
+| donor-2 | `trigger("pool_1", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xb6bd9037…d15537`](https://explorer-studio.genlayer.com/tx/0xb6bd903796e55ee1457bbbd69ada96b033cc52912a6f53ed935b78542ad15537) |
+| recipient | `resolve("pool_1")` |  | ACCEPTED | SUCCESS | dismissed | [`0x191d6feb…3569e3`](https://explorer-studio.genlayer.com/tx/0x191d6feb979d608be1aa2b221aa41af9b2d71b69f44797c6c65fd7f6aa3569e3) |
+| recipient | `trigger("pool_1", "TC", "1001325")` |  | ACCEPTED | SUCCESS | MEETS | [`0x7923325b…bc5859`](https://explorer-studio.genlayer.com/tx/0x7923325babd76f357a1496693c3cf978495f9068ed775121e2d875748ebc5859) |
+| donor-2 | `contest("pool_1")` |  | ACCEPTED | SUCCESS | MEETS | [`0x6b00aebe…3f51de`](https://explorer-studio.genlayer.com/tx/0x6b00aebeebfcd9afbee52208aecef0e91402a1cce5f3d35f5ff05161613f51de) |
+| donor-2 | `contest("pool_1")` |  | ACCEPTED | ERROR | refused: Donors have already contested this claim | [`0xc2ecb581…001667`](https://explorer-studio.genlayer.com/tx/0xc2ecb581363d97a5443fbf4ffee33c5b0b50fe98bdd571974ea8882b4e001667) |
+| donor-1 | `approve_release("pool_1")` |  | ACCEPTED | SUCCESS | paid | [`0x36f67b07…4ac5de`](https://explorer-studio.genlayer.com/tx/0x36f67b07dc34802aa039bf65e23077e64792c08b5e5f657b8baed09b1a4ac5de) |
+| recipient | `trigger("pool_2", "EQ", "1474477")` |  | ACCEPTED | SUCCESS | DOES_NOT_MEET | [`0xd207115b…b520c2`](https://explorer-studio.genlayer.com/tx/0xd207115b3f03673efe7b2054b9fe5f2da53031c340c4180dc94a107fe6b520c2) |
+| donor-1 | `contest("pool_2")` |  | ACCEPTED | ERROR | refused: Only the recipient can contest a claim that does not pay | [`0x3f012207…7e8b67`](https://explorer-studio.genlayer.com/tx/0x3f0122070b4aa1af77e7b2dec371d9d4f2a42a75348b9e27d698174a817e8b67) |
+| recipient | `resolve("pool_2")` |  | ACCEPTED | SUCCESS | dismissed | [`0x9360220d…b7e120`](https://explorer-studio.genlayer.com/tx/0x9360220d5d604f81fbf7b472d40be9c7ff22a5387ab83ba4300f4d2e6ab7e120) |
+| donor-1 | `create_pool("DEMO · Istanbul / Marmara earthquake re, "0x3139d8B50C7B3425Ec28EAf8ef139C55A29c6, "EQ", "TUR", "Red", "7", 1000000, "The earthquake struck the Marmara regio, 5 GEN, "2026-10-09", "2036-10-04")` | 20 | ACCEPTED | SUCCESS | pool_3 | [`0xde3fd2dd…d266f8`](https://explorer-studio.genlayer.com/tx/0xde3fd2dd582603c503fd91b04c4f618c7811ce31cb1d423a286ea59c58d266f8) |
+| donor-2 | `donate("pool_3")` | 10 | ACCEPTED | SUCCESS | donated | [`0x801fc4c9…a90561`](https://explorer-studio.genlayer.com/tx/0x801fc4c9a3f997943e7c57019fdeba4cc2ceaf7a6fdea89a93ed4a37c3a90561) |
+| donor-1 | `create_pool("DEMO · European wildfire recovery: refo, "0x3139d8B50C7B3425Ec28EAf8ef139C55A29c6, "WF", "ESP,FRA,GRC,ITA,PRT,TUR", "Red", "", 0, "", 3 GEN, "2026-06-01", "2027-12-31")` | 15 | ACCEPTED | SUCCESS | pool_4 | [`0x0e104279…7ec8d1`](https://explorer-studio.genlayer.com/tx/0x0e1042799c88dc0ec944f3e11c91450278812bf39601fdf489ca01162e7ec8d1) |
+| donor-2 | `donate("pool_4")` | 5 | ACCEPTED | SUCCESS | donated | [`0xbb2d84fa…bdf490`](https://explorer-studio.genlayer.com/tx/0xbb2d84fac8cacb117e2c01bb4f51b20247a47b1665ee63f48a3a49e67fbdf490) |
+| donor-2 | `trigger("pool_4", "WF", "1029628")` |  | ACCEPTED | SUCCESS | MEETS | [`0xaeb03198…3e7aae`](https://explorer-studio.genlayer.com/tx/0xaeb0319899ef6b8852cef080eab2ab236941fc304e0edaf19345dfe2ba3e7aae) |
+| donor-1 | `approve_release("pool_4")` |  | ACCEPTED | SUCCESS | paid | [`0x5165b4db…8bf20d`](https://explorer-studio.genlayer.com/tx/0x5165b4db26534c1e5b037b4585418313be2ac0bace3fb51831f8a7a2db8bf20d) |

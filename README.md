@@ -33,21 +33,21 @@ MetaMask on GenLayer Studio (chain 61999); the **Test GEN** button funds your wa
 
 ## Verified live, on real disasters
 
-`scripts/demo.mjs` ran three pools against real GDACS events with real validator consensus and real LLM calls. Every
+`scripts/demo.mjs` ran five pools against real GDACS events with real validator consensus and real LLM calls. Every
 transaction hash is in [`docs/REPRODUCTION.md`](docs/REPRODUCTION.md).
 
 | Pool and terms | GDACS event (real) | Validators read | Verdict | Outcome |
 |---|---|---|---|---|
 | Central Myanmar, EQ, M ≥ 7, ≥ 1M exposed, area *"Mandalay or Sagaing Region"* | EQ 1474479, the M6.7 aftershock | M6.7, USGS M6.7 | Does not meet (`severity`) | Dismissed by the recipient |
 | same | EQ 1477002, M5.5 two weeks later | M5.5, USGS M5.3 | Does not meet (`severity`) | Left pending; the next trigger supersedes it at once |
-| same | EQ 1474477, the M7.7 Mandalay earthquake of 2025-03-28 | Red, M7.7, USGS M7.7 "Mandalay", 17.2M exposed | **Meets** (LLM judged the area) | **4 GEN to the responder** |
+| same | EQ 1474477, the M7.7 Mandalay earthquake of 2025-03-28 | Red, M7.7, USGS M7.7 "Mandalay", 17.2M exposed | **Meets** (LLM judged the area) | The recipient's approval and contest were refused, a 20 GEN donation made after the claim gave no extra say, a minority approval could not release it; donors holding 15 of 15 pre-claim GEN did → **4 GEN to the responder** |
 | Mexico Pacific hurricanes, TC, Red, ≥ 180 km/h | EQ 1474477 | an earthquake | Does not meet (`hazard`) | Dismissed |
-| same | TC 1001325, Hurricane POLO-26 | Red, MEX, 287 km/h | **Meets**, contested by a donor, re-assessed **Meets** | **2 GEN to the responder** |
-| Rakhine coast, EQ, M ≥ 6, area *"Rakhine State on the western coast"* | EQ 1474477, the same Mandalay earthquake | every coded term passes | Does not meet (LLM judged the area) | Dismissed |
-| DEMO wildfire recovery, WF, six Mediterranean countries, Red | WF 1029628, the July 2026 forest fires in France | Red, FRA, 47,910 ha burned | **Meets** | **3 GEN to the responder** |
+| same | TC 1001325, Hurricane POLO-26 | Red, MEX, 287 km/h | **Meets**, contested by a donor (window restarted), re-assessed **Meets**; a second donor contest refused | donor-1 (5 of 8 GEN) approved → **2 GEN to the responder** |
+| Rakhine coast, EQ, M ≥ 6, area *"Rakhine State on the western coast"* | EQ 1474477, the same Mandalay earthquake | every coded term passes | Does not meet (LLM judged the area) | A donor's contest refused (only the recipient contests a refusal); dismissed by the recipient |
+| DEMO wildfire recovery, WF, six Mediterranean countries, Red | WF 1029628, the July 2026 forest fires in France | Red, FRA, 47,910 ha burned | **Meets** | donor-1 (15 of 20 GEN) approved → **3 GEN to the responder** |
 
-In the scripted run the responder's wallet went from 1 to **7 GEN** (4 + 2), the donors paid exactly what they put in,
-and the contract held the 19 GEN left in the three pools; the wildfire pool, added afterwards, brought the responder to **10 GEN**. A 0.05 GEN donation below the minimum was refunded, not kept.
+The responder's wallet went from 1 to **10 GEN** (4 + 2 + 3), the contract held exactly the 86 GEN left in the five
+pools, and a 0.05 GEN donation below the minimum was refunded, not kept. Every refusal above is a recorded transaction.
 
 The demo pool names and terms are written for the test; the events and every fact the validators read are real GDACS and
 USGS records.
