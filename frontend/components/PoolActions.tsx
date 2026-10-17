@@ -128,7 +128,13 @@ export function PoolActions({ pool }: { pool: Pool }) {
         ) : (
           <p className="text-sm text-muted-foreground">The contest window has passed. Anyone can resolve the claim.</p>
         )}
-        {meets && windowOpen && (
+        {meets && windowOpen && wei(pool.claim_weight_total) === 0n && (
+          <p className="text-xs text-muted-foreground">
+            No donor outside the recipients gave before this claim, so nobody can release it early. It can be released by anyone
+            once the contest window ends.
+          </p>
+        )}
+        {meets && windowOpen && wei(pool.claim_weight_total) > 0n && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Early-release approvals</span>

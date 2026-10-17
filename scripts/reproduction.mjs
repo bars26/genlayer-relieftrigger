@@ -38,6 +38,24 @@ for (const [k, a] of Object.entries(run.accounts)) {
   balances.push(`${k.padEnd(10)} ${short(a)}  ${fmt(BigInt(res.result))} GEN`);
 }
 
+let uiTest = "";
+try {
+  const ui = JSON.parse(readFileSync(new URL("../docs/ui-test.json", import.meta.url), "utf8"));
+  uiTest = `## Wallet test from the live app
+
+${ui.note} Wallet \`${ui.wallet}\`. All three transactions are FINALIZED with execution result SUCCESS.
+
+| Step | GEN sent | Result | Tx |
+|---|---|---|---|
+${ui.steps.map(([step, value, result, hash]) => `| ${esc(step)} | ${value} | ${esc(result)} | ${tx(hash)} |`).join("\n")}
+
+Reason stored with the ruling: ${ui.why}
+
+`;
+} catch {
+  // no UI test recorded
+}
+
 const rulings = run.rulings.map((r) => `| ${r.pool} | ${esc(r.label)} | **${r.verdict}** (${r.code}) | ${esc(r.why)} |`);
 const rows = run.log.map((r) => {
   const result = r.refused ? `refused: ${r.refused}` : r.returned ?? "";
@@ -70,13 +88,13 @@ ${pools.join("\n")}
 
 Wallet balances after finalization. The wildfire recipients started with 1 GEN each and received 3.00 / 1.80 / 1.20
 GEN (50 / 30 / 20% of the 6 GEN payout for the 19,294 ha Spanish fire); the earthquake recipients received 2.80 / 1.20
-GEN (70 / 30% of 4 GEN).
+GEN (70 / 30% of 4 GEN). The wildlife wallet also holds the 0.60 GEN it received in the wallet test below.
 
 \`\`\`
 ${balances.join("\n")}
 \`\`\`
 
-## Every transaction
+${uiTest}## Every transaction
 
 A refused call is still ACCEPTED by consensus; the contract outcome is the \`exec\` column (\`ERROR\` = the contract raised,
 on purpose here). Payable calls never raise: they return \`REFUNDED: <reason>\` and send the GEN back, because GenLayer

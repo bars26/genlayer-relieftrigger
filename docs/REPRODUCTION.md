@@ -33,17 +33,29 @@ pool_2 megafire  state open    balance  10.00 GEN  paid 0.00 GEN  thresholds {"W
 
 Wallet balances after finalization. The wildfire recipients started with 1 GEN each and received 3.00 / 1.80 / 1.20
 GEN (50 / 30 / 20% of the 6 GEN payout for the 19,294 ha Spanish fire); the earthquake recipients received 2.80 / 1.20
-GEN (70 / 30% of 4 GEN).
+GEN (70 / 30% of 4 GEN). The wildlife wallet also holds the 0.60 GEN it received in the wallet test below.
 
 ```
 donor1     0x922b…29fA  72.00 GEN
 donor2     0xE0B5…347A  80.00 GEN
 reforest   0xf956…87B1  4.00 GEN
-wildlife   0x46E7…9338  2.80 GEN
+wildlife   0x46E7…9338  3.40 GEN
 families   0x4B8a…5822  2.20 GEN
 responder  0x8c75…39BC  3.80 GEN
 shelter    0x8086…5C05  2.20 GEN
 ```
+
+## Wallet test from the live app
+
+MetaMask test from the production app (relieftrigger-bars26.vercel.app). The tester's wallet is both the only donor and a 70% recipient, so it has no say in its own payout: early release was impossible and the claim was released after the contest window. Wallet `0x4f80b5c475fced34fc9a07ffccf39e1adc1406bf`. All three transactions are FINALIZED with execution result SUCCESS.
+
+| Step | GEN sent | Result | Tx |
+|---|---|---|---|
+| Create pool 'Wildfire test': WF, six Mediterranean countries, Orange+, WF:10000 ha, payout 2, recipients 70% tester (Reforestation) / 30% 0x46E7…9338 (Wildlife care) | 3 GEN | pool_3 | [`0x1154a1f4…`](https://explorer-studio.genlayer.com/tx/0x1154a1f4f1e44dff8919ef1a682a221f5b48ba9afd632d3985e9291bb2181d78) |
+| Trigger WF 1030410 (Spain, 19,294 ha) |  | MEETS (met) | [`0x6cfe9234…`](https://explorer-studio.genlayer.com/tx/0x6cfe9234683f6658065115747cb23e24fc79f38a9c62a10f12f3b840fad101ae) |
+| Release 2.00 GEN after the window |  | paid: 1.40 GEN to the tester, 0.60 GEN to Wildlife care (its balance 2.80 -> 3.40 GEN) | [`0x0366b99d…`](https://explorer-studio.genlayer.com/tx/0x0366b99d4e2950778a8c64aeddc388e5ee49d414ad2b3d737cbb432924db725d) |
+
+Reason stored with the ruling: WF 1030410: GDACS ORANGE alert in ESP, starting 2026-08-10, 19,294 ha (threshold 10,000 ha). Every coded term is met.
 
 ## Every transaction
 
