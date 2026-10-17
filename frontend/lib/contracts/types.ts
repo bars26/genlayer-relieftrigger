@@ -8,11 +8,11 @@ export interface Pool {
   id: string;
   creator: string;
   name: string;
-  recipient: string;
+  recipients_json: string;
   hazards: string;
   countries: string;
   min_alert: "GREEN" | "ORANGE" | "RED";
-  min_severity: string;
+  thresholds_json: string;
   min_exposed: string | number | bigint;
   area_terms: string;
   payout: string | number | bigint;
@@ -31,6 +31,7 @@ export interface Pool {
   claim_verdict: Verdict;
   claim_code: string;
   claim_facts_json: string;
+  claim_why: string;
   claim_contested: boolean;
   contrib_json: string;
   claim_weights_json: string;
@@ -146,7 +147,30 @@ export const coverageEnded = (p: Pool) => todayUtc() > p.coverage_end;
 
 export const donorsOf = (p: Pool) => parseJson<string[]>(p.donors_json, []);
 
-/** A donor's say in the current claim: GEN donated before it was opened (0 for the recipient). */
+export interface Recipient {
+  address: string;
+  percent: number;
+  label: string;
+}
+
+/** The wallets a payout is split between, in order; the first takes the rounding remainder. */
+export const recipientsOf = (p: Pool) => parseJson<Recipient[]>(p.recipients_json, []);
+export const isRecipient = (p: Pool, a?: string | null) => recipientsOf(p).some((r) => sameAddress(r.address, a));
+
+/** Per-hazard GDACS severity thresholds: EQ magnitude, TC wind km/h, WF burned hectares. */
+export const thresholdsOf = (p: Pool) => parseJson<Record<string, number>>(p.thresholds_json, {});
+export const THRESHOLD_UNIT: Record<string, { label: string; placeholder: string }> = {
+  EQ: { label: "Earthquake magnitude", placeholder: "7" },
+  TC: { label: "Cyclone wind (km/h)", placeholder: "180" },
+  WF: { label: "Wildfire burned area (ha)", placeholder: "10000" },
+};
+export function thresholdText(hazard: string, value?: number | null): string {
+  if (value === undefined || value === null) return "—";
+  if (hazard === "EQ") return `M${value}`;
+  return `${Number(value).toLocaleString("en-US")} ${hazard === "WF" ? "ha" : "km/h"}`;
+}
+
+/** A donor's say in the current claim: GEN donated before it was opened (0 for a recipient). */
 export const claimWeight = (p: Pool, a?: string | null) =>
   a ? wei(parseJson<Record<string, string>>(p.claim_weights_json, {})[a.toLowerCase()] ?? "0") : 0n;
 
@@ -164,7 +188,7 @@ export const VERDICT_STYLE: Record<Exclude<Verdict, "">, { label: string; cls: s
   MEETS: {
     label: "Meets terms",
     cls: "bg-green-500/20 text-green-400 border-green-500/40",
-    help: "The event satisfies every term. Resolving pays the recipient.",
+    help: "The event satisfies every term. Resolving splits the payout between the recipients.",
   },
   DOES_NOT_MEET: {
     label: "Does not meet",
@@ -186,7 +210,7 @@ export const CODE_TEXT: Record<string, string> = {
   country: "no affected country is covered by this pool",
   alert: "the GDACS alert level is below the pool's minimum",
   date: "the event date is outside the coverage period",
-  severity: "the severity is below the pool's minimum",
+  severity: "the severity (magnitude, wind or burned hectares) is below the pool's threshold",
   exposure: "fewer people were exposed than the pool requires",
   sources_disagree: "GDACS and USGS magnitudes differ by more than 0.3",
   gdacs_unreachable: "GDACS could not be read",

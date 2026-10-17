@@ -66,11 +66,13 @@ const WRITE_EFFECT: Record<string, string> = {
 
 export interface CreatePoolInput {
   name: string;
-  recipient: string;
+  /** JSON list of {address, percent, label}; percents add up to 100. */
+  recipients: string;
   hazards: string;
   countries: string;
   minAlert: string;
-  minSeverity: string;
+  /** e.g. "EQ:7, WF:10000" */
+  thresholds: string;
   minExposed: bigint;
   areaTerms: string;
   payout: bigint;
@@ -120,7 +122,7 @@ class ReliefTrigger {
   createPool(p: CreatePoolInput, valueWei: bigint, onProgress?: (p: TxProgress) => void) {
     return this.write(
       "create_pool",
-      [p.name, p.recipient, p.hazards, p.countries, p.minAlert, p.minSeverity, p.minExposed, p.areaTerms, p.payout, p.coverageStart, p.coverageEnd],
+      [p.name, p.recipients, p.hazards, p.countries, p.minAlert, p.thresholds, p.minExposed, p.areaTerms, p.payout, p.coverageStart, p.coverageEnd],
       valueWei,
       onProgress
     );

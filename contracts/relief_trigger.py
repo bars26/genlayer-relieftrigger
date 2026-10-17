@@ -9,6 +9,9 @@ from genlayer import *
 HAZARDS = ("EQ", "TC", "FL", "VO", "DR", "WF")  # GDACS event types
 ALERT_RANK = {"GREEN": 0, "ORANGE": 1, "RED": 2}
 VERDICTS = ("MEETS", "DOES_NOT_MEET", "UNCLEAR")
+THRESHOLD_HAZARDS = {"EQ": "magnitude", "TC": "wind (km/h)", "WF": "burned area (ha)"}  # GDACS severity units
+_UNIT = {"EQ": "M", "TC": " km/h", "WF": " ha"}
+_MAX_RECIPIENTS = 5
 
 STATE_OPEN = "open"  # funded, waiting for a qualifying event
 STATE_PENDING = "pending"  # a triggered event is inside the contest window
@@ -95,17 +98,59 @@ def _event_facts(event_type: str, event_id: str) -> dict:
     return facts
 
 
+def _num(value) -> str:
+    if value is None:
+        return "?"
+    return f"{value:,.0f}" if abs(value) >= 100 else f"{value:g}"
+
+
+def _sev(hazard: str, value) -> str:
+    if value is None:
+        return "?"
+    return f"M{value:g}" if hazard == "EQ" else f"{_num(value)}{_UNIT.get(hazard, '')}"
+
+
+def explain(code: str, verdict: str, facts: dict) -> str:
+    """A plain-English reason for a ruling, built only from the facts every validator agreed on."""
+    hz, ev = facts.get("hazard", "?"), facts.get("event", "the event")
+    seen = f"{ev}: GDACS {facts.get('alert') or '?'} alert in {', '.join(facts.get('countries') or []) or '?'}, starting {facts.get('from_date') or '?'}"
+    threshold = facts.get("threshold")
+    lines = {
+        "gdacs_unreachable": f"GDACS could not be read for {ev}, so nothing can be decided yet.",
+        "hazard": f"{seen}. This pool covers {facts.get('pool_hazards')}, not {hz}.",
+        "country": f"{seen}. This pool covers {facts.get('pool_countries')} only.",
+        "alert": f"{seen}. This pool needs at least a {facts.get('min_alert')} alert.",
+        "date": f"{seen}. The pool covers events starting {facts.get('coverage')}.",
+        "usgs_unreachable": f"{seen}. USGS could not be read to cross-check the magnitude.",
+        "sources_disagree": f"{seen}. GDACS reports {_sev(hz, facts.get('severity'))} but USGS reports M{facts.get('usgs_mag')}; they must agree within 0.3.",
+        "severity": f"{seen}, {_sev(hz, facts.get('severity'))}. The pool's {THRESHOLD_HAZARDS.get(hz, 'severity')} threshold is {_sev(hz, threshold)}.",
+        "exposure": f"{seen}. {_num(facts.get('exposed'))} people were exposed to strong shaking; the pool needs {_num(facts.get('min_exposed'))}.",
+    }
+    if code in lines:
+        return lines[code]
+    passed = f"{seen}"
+    if threshold is not None:
+        passed += f", {_sev(hz, facts.get('severity'))} (threshold {_sev(hz, threshold)})"
+    if facts.get("usgs_mag") is not None:
+        passed += f", USGS M{facts.get('usgs_mag')} agrees"
+    passed += ". Every coded term is met"
+    if code == "met":
+        return passed + "."
+    answer = {"MEETS": "the event did strike the area the donors described", "DOES_NOT_MEET": "the event did not strike the area the donors described", "UNCLEAR": "the record does not say enough about the area"}
+    return passed + f"; validators judged that {answer.get(verdict, 'the area is unclear')}."
+
+
 @allow_storage
 @dataclass
 class Pool:
     id: str
     creator: Address
     name: str
-    recipient: Address  # the pre-agreed responder that receives payouts
+    recipients_json: str  # [{"address": "0x..", "percent": 50, "label": ".."}] the payout is split between them
     hazards: str  # comma list of GDACS event types
     countries: str  # comma list of ISO3 codes
     min_alert: str  # GREEN | ORANGE | RED
-    min_severity: str  # EQ: magnitude, TC: wind km/h; "" = no threshold
+    thresholds_json: str  # {"EQ": 7.0, "WF": 10000.0}: magnitude, wind km/h, burned hectares
     min_exposed: u256  # EQ: people in MMI>=VII; 0 = no threshold
     area_terms: str  # free-text condition judged by validators; "" = none
     payout: u256  # GEN released per qualifying event
@@ -124,16 +169,17 @@ class Pool:
     claim_verdict: str
     claim_code: str
     claim_facts_json: str
+    claim_why: str  # plain-English reason for the current ruling
     claim_contested: bool  # True once either side has contested the current claim
     contrib_json: str  # {"0xaddr": "wei"} every donor's total contribution
     # Governance of the current claim, snapshotted when it is triggered: only GEN donated
-    # before the claim counts, and the recipient's own donations never count.
+    # before the claim counts, and the recipients' own donations never count.
     claim_weights_json: str  # {"0xaddr": "wei"} each donor's say in this claim
     claim_weight_total: u256
     approvals_json: str  # donors who approved releasing this payout early
     approval_weight: u256
     donor_contested: bool  # donors may contest a MEETS claim once
-    recipient_contested: bool  # the recipient may contest a non-MEETS claim once
+    recipient_contested: bool  # the recipients may contest a non-MEETS claim once
     history_json: str
 
 
@@ -212,11 +258,17 @@ class ReliefTrigger(gl.Contract):
         pool.balance = u256(int(pool.balance) + amount)
         pool.total_donated = u256(int(pool.total_donated) + amount)
 
+    def _recipients(self, pool: Pool) -> list:
+        return json.loads(pool.recipients_json)
+
+    def _is_recipient(self, pool: Pool, who: Address) -> bool:
+        return any(r["address"] == who.as_hex.lower() for r in self._recipients(pool))
+
     def _open_claim_governance(self, pool: Pool) -> None:
-        """Snapshot who has a say in the claim being opened: donors as of now, minus the recipient."""
+        """Snapshot who has a say in the claim being opened: donors as of now, minus every recipient."""
         contrib = json.loads(pool.contrib_json) if pool.contrib_json else {}
-        recipient = pool.recipient.as_hex.lower()
-        weights = {a: w for a, w in contrib.items() if a != recipient and int(w) > 0}
+        recipients = {r["address"] for r in self._recipients(pool)}
+        weights = {a: w for a, w in contrib.items() if a not in recipients and int(w) > 0}
         pool.claim_weights_json = json.dumps(weights, sort_keys=True)
         pool.claim_weight_total = u256(sum(int(w) for w in weights.values()))
         self._reset_approvals(pool)
@@ -245,15 +297,17 @@ class ReliefTrigger(gl.Contract):
         meets = pool.claim_verdict == "MEETS"
         if meets:
             amount = min(int(pool.payout), int(pool.balance))
-            self._pay(pool.recipient, amount)
+            split = self._split(pool, amount)
+            for address, part in split:
+                self._pay(Address(address), part)
             pool.balance = u256(int(pool.balance) - amount)
             pool.total_paid = u256(int(pool.total_paid) + amount)
             paid = json.loads(pool.paid_events_json)
             paid.append(key)
             pool.paid_events_json = json.dumps(paid)
-            self._log(pool, "paid", event_key=key, amount=str(amount))
+            self._log(pool, "paid", event_key=key, amount=str(amount), split=[[a[:10], str(v)] for a, v in split], why=pool.claim_why[:300])
         else:
-            self._log(pool, "dismissed", event_key=key, verdict=pool.claim_verdict, code=pool.claim_code)
+            self._log(pool, "dismissed", event_key=key, verdict=pool.claim_verdict, code=pool.claim_code, why=pool.claim_why[:300])
         pool.state = STATE_OPEN
         pool.claim_event, pool.claim_by, pool.claim_at = "", _ZERO, ""
         pool.claim_weights_json, pool.claim_weight_total = "{}", u256(0)
@@ -261,21 +315,36 @@ class ReliefTrigger(gl.Contract):
         pool.claim_contested = pool.donor_contested = pool.recipient_contested = False
         return "paid" if meets else "dismissed"
 
+    def _split(self, pool: Pool, amount: int) -> list:
+        """Each recipient's share of a payout; the rounding remainder goes to the first recipient."""
+        recipients = self._recipients(pool)
+        parts = [amount * int(r["percent"]) // 100 for r in recipients]
+        parts[0] += amount - sum(parts)
+        return [(r["address"], p) for r, p in zip(recipients, parts)]
+
     def _assess(self, pool: Pool, event_type: str, event_id: str) -> dict:
         """One consensus assessment of a GDACS event against the pool's terms."""
         hazards = pool.hazards.split(",")
         countries = set(pool.countries.split(","))
         min_alert = ALERT_RANK[pool.min_alert]
-        min_severity = float(pool.min_severity) if pool.min_severity else None
+        pool_min_alert = pool.min_alert
+        thresholds = json.loads(pool.thresholds_json) if pool.thresholds_json else {}
         min_exposed = int(pool.min_exposed)
         start, end, area = pool.coverage_start, pool.coverage_end, pool.area_terms
 
         def assess() -> str:
             f = _event_facts(event_type, event_id)
             facts = {k: f[k] for k in ("hazard", "countries", "alert", "from_date", "severity", "exposed", "usgs_mag")}
+            facts.update(
+                event=f"{event_type} {event_id}", pool_hazards=",".join(hazards), pool_countries=",".join(sorted(countries)),
+                min_alert=pool_min_alert, coverage=f"{start} to {end}", threshold=thresholds.get(f["hazard"]),
+                min_exposed=min_exposed or None,
+            )
 
             def done(verdict: str, code: str) -> str:
-                return json.dumps({"verdict": verdict, "code": code, "facts": facts}, sort_keys=True)
+                return json.dumps(
+                    {"verdict": verdict, "code": code, "facts": facts, "why": explain(code, verdict, facts)}, sort_keys=True
+                )
 
             # Everything countable is decided in code; the model is never asked about it.
             if not f["reachable"]:
@@ -293,8 +362,9 @@ class ReliefTrigger(gl.Contract):
                     return done("UNCLEAR", "usgs_unreachable")
                 if f["severity"] is None or abs(f["severity"] - f["usgs_mag"]) > _MAX_MAG_GAP:
                     return done("DOES_NOT_MEET", "sources_disagree")
-            if min_severity is not None and f["hazard"] in ("EQ", "TC"):
-                if f["severity"] is None or f["severity"] < min_severity:
+            threshold = thresholds.get(f["hazard"])
+            if threshold is not None:
+                if f["severity"] is None or f["severity"] < threshold:
                     return done("DOES_NOT_MEET", "severity")
             if min_exposed > 0 and f["hazard"] == "EQ":
                 if f["exposed"] is None or f["exposed"] < min_exposed:
@@ -345,21 +415,40 @@ Respond only with that JSON, without any prefix or suffix.
 
     @gl.public.write.payable
     def create_pool(
-        self, name: str, recipient: str, hazards: str, countries: str, min_alert: str,
-        min_severity: str, min_exposed: int, area_terms: str, payout: int,
+        self, name: str, recipients: str, hazards: str, countries: str, min_alert: str,
+        thresholds: str, min_exposed: int, area_terms: str, payout: int,
         coverage_start: str, coverage_end: str,
     ) -> str:
-        """Fund a pool that pays `recipient` when a qualifying disaster is confirmed.
+        """Fund a pool that pays its recipients when a qualifying disaster is confirmed.
+
+        `recipients` is a JSON list of up to 5 {"address", "percent", "label"} whose percents sum
+        to 100; each payout is split between them. `thresholds` sets a minimum GDACS severity per
+        hazard, e.g. "EQ:7, WF:10000" (magnitude, wind km/h for TC, burned hectares for WF).
         Returns the pool id, or "REFUNDED: ..." if the terms are invalid."""
         name, area_terms = self._text(name)[:120], self._text(area_terms)[:600]
         if not name:
             return self._reject("name is required")
         try:
-            recipient_addr = Address(self._text(recipient))
-        except Exception:
-            return self._reject("recipient must be a wallet address")
-        if recipient_addr == _ZERO:
-            return self._reject("recipient must be a wallet address")
+            raw = json.loads(self._text(recipients))
+        except ValueError:
+            return self._reject('recipients must be a JSON list like [{"address": "0x..", "percent": 100, "label": "Responder"}]')
+        if not isinstance(raw, list) or not 1 <= len(raw) <= _MAX_RECIPIENTS:
+            return self._reject(f"recipients must list 1 to {_MAX_RECIPIENTS} wallets")
+        recipient_list = []
+        for r in raw:
+            try:
+                addr = Address(str(r.get("address", "")).strip())
+                percent = int(r.get("percent"))
+            except Exception:
+                return self._reject("each recipient needs a wallet address and a whole-number percent")
+            if addr == _ZERO or not 1 <= percent <= 100:
+                return self._reject("each recipient needs a wallet address and a percent from 1 to 100")
+            label = str(r.get("label") or "").strip()[:40]
+            recipient_list.append({"address": addr.as_hex.lower(), "percent": percent, "label": label})
+        if len({r["address"] for r in recipient_list}) != len(recipient_list):
+            return self._reject("each recipient wallet can appear only once")
+        if sum(r["percent"] for r in recipient_list) != 100:
+            return self._reject("recipient percents must add up to 100")
         hazard_list = sorted({h.strip().upper() for h in self._text(hazards).split(",") if h.strip()})
         if not hazard_list or any(h not in HAZARDS for h in hazard_list):
             return self._reject(f"hazards must be a comma list of {', '.join(HAZARDS)}")
@@ -369,9 +458,15 @@ Respond only with that JSON, without any prefix or suffix.
         min_alert = self._text(min_alert).upper()
         if min_alert not in ALERT_RANK:
             return self._reject("min_alert must be Green, Orange or Red")
-        min_severity = self._text(min_severity)
-        if min_severity and (not re.match(r"^\d+(\.\d+)?$", min_severity) or float(min_severity) <= 0):
-            return self._reject("min_severity must be a positive number or empty")
+        threshold_map = {}
+        for part in [p.strip() for p in self._text(thresholds).replace(";", ",").split(",") if p.strip()]:
+            m = re.match(r"^([A-Za-z]{2})\s*:\s*(\d+(\.\d+)?)$", part)
+            if not m or m.group(1).upper() not in THRESHOLD_HAZARDS or float(m.group(2)) <= 0:
+                return self._reject("thresholds must look like EQ:7, TC:180, WF:10000 (positive numbers for EQ, TC or WF)")
+            hz = m.group(1).upper()
+            if hz not in hazard_list:
+                return self._reject(f"thresholds may only name the pool's own hazards ({hz} is not one of them)")
+            threshold_map[hz] = float(m.group(2))
         exposed_txt, payout_txt = self._text(min_exposed) or "0", self._text(payout)
         if not re.match(r"^\d+$", exposed_txt) or not re.match(r"^\d+$", payout_txt):
             return self._reject("min_exposed and payout must be non-negative integers")
@@ -391,13 +486,13 @@ Respond only with that JSON, without any prefix or suffix.
 
         pool_id = f"pool_{int(self.pool_count)}"
         pool = Pool(
-            id=pool_id, creator=gl.message.sender_address, name=name, recipient=recipient_addr,
+            id=pool_id, creator=gl.message.sender_address, name=name, recipients_json=json.dumps(recipient_list),
             hazards=",".join(hazard_list), countries=",".join(country_list), min_alert=min_alert,
-            min_severity=min_severity, min_exposed=u256(min_exposed_i), area_terms=area_terms,
+            thresholds_json=json.dumps(threshold_map, sort_keys=True), min_exposed=u256(min_exposed_i), area_terms=area_terms,
             payout=u256(payout_i), coverage_start=start, coverage_end=end, state=STATE_OPEN,
             balance=u256(0), total_donated=u256(0), total_paid=u256(0), closing_balance=u256(0),
             donors_json="[]", paid_events_json="[]", claim_event="", claim_by=_ZERO, claim_at="",
-            claim_verdict="", claim_code="", claim_facts_json="{}", claim_contested=False,
+            claim_verdict="", claim_code="", claim_facts_json="{}", claim_why="", claim_contested=False,
             contrib_json="{}", claim_weights_json="{}", claim_weight_total=u256(0), approvals_json="[]",
             approval_weight=u256(0), donor_contested=False, recipient_contested=False, history_json="[]",
         )
@@ -453,6 +548,7 @@ Respond only with that JSON, without any prefix or suffix.
         pool.claim_verdict = result["verdict"]
         pool.claim_code = result["code"]
         pool.claim_facts_json = json.dumps(result["facts"], sort_keys=True)
+        pool.claim_why = str(result.get("why", ""))[:600]
         self._open_claim_governance(pool)
         self._log(pool, "triggered", event_key=key, verdict=result["verdict"], code=result["code"])
         return result["verdict"]
@@ -462,7 +558,7 @@ Respond only with that JSON, without any prefix or suffix.
         """The side a ruling goes against asks once for an independent re-assessment.
 
         A MEETS ruling can be contested only by a donor who had donated before the claim
-        (the recipient benefits from it); any other ruling only by the recipient. Each side
+        (the recipients benefit from it); any other ruling only by a recipient. Each side
         contests at most once per claim, and every contest restarts the contest window and
         clears early-release approvals, so the other side can always answer a changed ruling
         before anything is paid."""
@@ -482,10 +578,10 @@ Respond only with that JSON, without any prefix or suffix.
             pool.donor_contested = True
             by = "donor"
         else:
-            if sender != pool.recipient:
-                raise gl.vm.UserError("Only the recipient can contest a claim that does not pay")
+            if not self._is_recipient(pool, sender):
+                raise gl.vm.UserError("Only a recipient can contest a claim that does not pay")
             if pool.recipient_contested:
-                raise gl.vm.UserError("The recipient has already contested this claim")
+                raise gl.vm.UserError("The recipients have already contested this claim")
             pool.recipient_contested = True
             by = "recipient"
         event_type, event_id = pool.claim_event.split(":")
@@ -494,6 +590,7 @@ Respond only with that JSON, without any prefix or suffix.
         pool.claim_verdict = result["verdict"]
         pool.claim_code = result["code"]
         pool.claim_facts_json = json.dumps(result["facts"], sort_keys=True)
+        pool.claim_why = str(result.get("why", ""))[:600]
         pool.claim_contested = True
         pool.claim_at = self._now()  # a fresh window for the other side
         self._reset_approvals(pool)
@@ -504,7 +601,7 @@ Respond only with that JSON, without any prefix or suffix.
     def approve_release(self, pool_id: str) -> str:
         """A donor who donated before the claim approves paying a MEETS claim before the window ends.
 
-        Once donors holding more than half of the pre-claim donations (excluding the recipient)
+        Once donors holding more than half of the pre-claim donations (excluding the recipients)
         have approved, the payout is released at once. Returns "approved" or "paid"."""
         pool = self._get(pool_id)
         if pool.state != STATE_PENDING or pool.claim_verdict != "MEETS":
@@ -528,11 +625,11 @@ Respond only with that JSON, without any prefix or suffix.
 
     @gl.public.write
     def resolve(self, pool_id: str) -> str:
-        """Close a pending claim: pay the recipient if it MEETS, otherwise dismiss it.
+        """Close a pending claim: pay the recipients their split if it MEETS, otherwise dismiss it.
 
         Anyone can resolve once the contest window has passed. Before that, a payout needs
         approvals from donors holding more than half of the pre-claim donations (see
-        approve_release), and only the recipient can dismiss a claim that does not pay."""
+        approve_release), and only a recipient can dismiss a claim that does not pay."""
         pool = self._get(pool_id)
         if pool.state != STATE_PENDING:
             raise gl.vm.UserError("Only a pending claim can be resolved")
@@ -542,8 +639,8 @@ Respond only with that JSON, without any prefix or suffix.
                     raise gl.vm.UserError(
                         "The contest window is still open; an early payout needs approval from donors holding more than half of the pre-claim donations"
                     )
-            elif gl.message.sender_address != pool.recipient:
-                raise gl.vm.UserError("The contest window is still open; only the recipient can dismiss early")
+            elif not self._is_recipient(pool, gl.message.sender_address):
+                raise gl.vm.UserError("The contest window is still open; only a recipient can dismiss early")
         return self._finish_claim(pool)
 
     @gl.public.write
@@ -601,7 +698,7 @@ Respond only with that JSON, without any prefix or suffix.
 
     @gl.public.view
     def claim_weight(self, pool_id: str, donor: str) -> str:
-        """The say a donor has in the current claim (wei donated before it, 0 for the recipient)."""
+        """The say a donor has in the current claim (wei donated before it, 0 for a recipient)."""
         return str(self._claim_weight(self._get(pool_id), Address(donor)))
 
     @gl.public.view

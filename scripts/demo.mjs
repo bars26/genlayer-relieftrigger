@@ -1,20 +1,21 @@
-// Live end-to-end demo of ReliefTrigger on GenLayer Studio, using real GDACS events.
+// Live end-to-end demo of ReliefTrigger v3 on GenLayer Studio, using real GDACS events:
+// burned-hectare thresholds for wildfires, payouts split between several purpose wallets and
+// a plain-English reason stored with every ruling.
 //
-//   node scripts/demo.mjs <contract-address>            # create pools, trigger, contest, pay
-//   node scripts/demo.mjs <contract-address> close <pool_id> <donor1-key> <donor2-key>
-//                                                       # after coverage ends: close + reclaim
+//   node scripts/demo.mjs <contract-address>
 //
-// Creates throwaway Studio accounts (two donors and a relief recipient), funds them from the
-// Studio faucet, then runs real GDACS events through three pools. Prints each transaction hash,
-// consensus status and the contract's own execution result (a reverted call is still ACCEPTED).
+// Creates throwaway Studio accounts (two donors, three wildfire-recovery wallets and two
+// earthquake-response wallets), funds them from the Studio faucet, then runs real GDACS events
+// through three pools. Prints each transaction hash, consensus status, the contract's own
+// execution result (a reverted call is still ACCEPTED) and the reason stored with each ruling.
 
 import { createClient, createAccount, generatePrivateKey } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
 import { writeFileSync } from "fs";
 
-const [CONTRACT, MODE, ...REST] = process.argv.slice(2);
+const [CONTRACT] = process.argv.slice(2);
 if (!CONTRACT) {
-  console.error("usage: node scripts/demo.mjs <contract-address> [close <pool_id> <donor1-key> <donor2-key>]");
+  console.error("usage: node scripts/demo.mjs <contract-address>");
   process.exit(1);
 }
 const RPC = "https://studio.genlayer.com/api";
@@ -119,150 +120,88 @@ const fmt = (wei) => (Number(wei) / 1e18).toFixed(2);
 const fund = async (addr, gen) => rpc("sim_fundAccount", [addr, Number(gen * GEN)]);
 const field = (pool, name) => (pool instanceof Map ? pool.get(name) : pool[name]);
 
-if (MODE === "close") {
-  const [poolId, k1, k2] = REST;
-  const d1 = createAccount(k1);
-  const d2 = createAccount(k2);
-  const D1 = client(d1);
-  const D2 = client(d2);
-  const before = { d1: await balance(d1.address), d2: await balance(d2.address) };
-  await write(D1, "donor-1", "close", [poolId]);
-  await write(D1, "donor-1", "reclaim", [poolId]);
-  await write(D2, "donor-2", "reclaim", [poolId]);
-  const p = await read(D1, "get_pool", [poolId]);
-  console.log(`\n${poolId}: state=${field(p, "state")} closing_balance=${fmt(field(p, "closing_balance"))} balance=${fmt(field(p, "balance"))}`);
-  await sleep(5000);
-  const after = { d1: await balance(d1.address), d2: await balance(d2.address) };
-  console.log(`donor-1 ${fmt(before.d1)} -> ${fmt(after.d1)} GEN, donor-2 ${fmt(before.d2)} -> ${fmt(after.d2)} GEN`);
-  console.log("\nJSON:", JSON.stringify({ contract: CONTRACT, poolId, log }));
-  process.exit(0);
-}
+// ---- v3 run: per-hazard thresholds, split payouts, explained rulings ----
+const keys = Object.fromEntries(["donor1", "donor2", "reforest", "wildlife", "families", "responder", "shelter"].map((k) => [k, generatePrivateKey()]));
+const acct = Object.fromEntries(Object.entries(keys).map(([k, v]) => [k, createAccount(v)]));
+const C = Object.fromEntries(Object.entries(acct).map(([k, a]) => [k, client(a)]));
+if (process.env.DEMO_KEYS) writeFileSync(process.env.DEMO_KEYS, JSON.stringify(keys));
 
-const donor1Key = generatePrivateKey();
-const donor2Key = generatePrivateKey();
-const donor1 = createAccount(donor1Key);
-const donor2 = createAccount(donor2Key);
-const recipientKey = generatePrivateKey();
-const recipient = createAccount(recipientKey);
-const D1 = client(donor1);
-const D2 = client(donor2);
-const R = client(recipient);
-
-// Keep the throwaway keys outside the repo so the close/reclaim step can run after coverage ends.
-if (process.env.DEMO_KEYS) {
-  writeFileSync(process.env.DEMO_KEYS, JSON.stringify({ donor1: donor1Key, donor2: donor2Key, recipient: recipientKey }));
-}
 console.log("contract ", CONTRACT);
-console.log("donor-1  ", donor1.address);
-console.log("donor-2  ", donor2.address);
-console.log("recipient", recipient.address);
-await fund(donor1.address, 100n);
-await fund(donor2.address, 100n);
-await fund(recipient.address, 1n);
+for (const [k, a] of Object.entries(acct)) console.log(k.padEnd(10), a.address);
+await fund(acct.donor1.address, 100n);
+await fund(acct.donor2.address, 100n);
+for (const k of ["reforest", "wildlife", "families", "responder", "shelter"]) await fund(acct[k].address, 1n);
 await sleep(3000);
-const start = { d1: await balance(donor1.address), d2: await balance(donor2.address), r: await balance(recipient.address) };
-console.log(`funded: donor-1 ${fmt(start.d1)}, donor-2 ${fmt(start.d2)}, recipient ${fmt(start.r)} GEN\n`);
+const start = Object.fromEntries(await Promise.all(Object.entries(acct).map(async ([k, a]) => [k, await balance(a.address)])));
+console.log(`funded: ${Object.entries(start).map(([k, v]) => `${k} ${fmt(v)}`).join(", ")} GEN\n`);
 
-const first = Number((await read(D1, "list_pools")).length);
-const ids = { myanmar: `pool_${first}`, mexico: `pool_${first + 1}`, rakhine: `pool_${first + 2}`, istanbul: `pool_${first + 3}`, wildfire: `pool_${first + 4}` };
-const today = new Date().toISOString().slice(0, 10);
-
-// Pool A: central Myanmar earthquakes, M7+, 1M+ people exposed, area judged by the validators' LLMs.
-await write(D1, "donor-1", "create_pool", [
-  "Central Myanmar earthquake response", recipient.address, "EQ", "MMR", "Orange", "7", 1000000,
-  "The earthquake struck the Mandalay or Sagaing Region of central Myanmar.", 4n * GEN, "2025-01-01", "2026-12-31",
-], 10n * GEN);
-await write(D2, "donor-2", "donate", [ids.myanmar], 5n * GEN);
-await write(D2, "donor-2", "donate", [ids.myanmar], GEN / 20n); // below 0.1 GEN: refunded, not kept
-
-// Pool B: Pacific hurricanes hitting Mexico, Red alert, 180+ km/h, coverage ends today.
-await write(D1, "donor-1", "create_pool", [
-  "Mexico Pacific hurricane fund", recipient.address, "TC", "MEX", "Red", "180", 0, "", 2n * GEN, "2026-06-01", today,
-], 5n * GEN);
-await write(D2, "donor-2", "donate", [ids.mexico], 3n * GEN);
-
-// Pool C: the same Myanmar data, but terms written for a different region.
-await write(D1, "donor-1", "create_pool", [
-  "Rakhine coast earthquake response", recipient.address, "EQ", "MMR", "Orange", "6", 0,
-  "The earthquake struck Rakhine State on Myanmar's western coast.", 1n * GEN, "2025-01-01", "2026-12-31",
-], 2n * GEN);
-
-console.log("");
+const first = Number((await read(C.donor1, "list_pools")).length);
+const ids = { wildfire: `pool_${first}`, quake: `pool_${first + 1}`, megafire: `pool_${first + 2}` };
+const MED = "ESP,FRA,GRC,ITA,PRT,TUR";
+const SPLIT = JSON.stringify([
+  { address: acct.reforest.address, percent: 50, label: "Reforestation" },
+  { address: acct.wildlife.address, percent: 30, label: "Wildlife care" },
+  { address: acct.families.address, percent: 20, label: "Displaced families" },
+]);
+const QUAKE_SPLIT = JSON.stringify([
+  { address: acct.responder.address, percent: 70, label: "Search and rescue" },
+  { address: acct.shelter.address, percent: 30, label: "Emergency shelter" },
+]);
+const rulings = [];
 const claim = async (who, c, label, poolId, type, id) => {
   await write(c, who, "trigger", [poolId, type, id]);
-  const p = await read(D1, "get_pool", [poolId]);
-  const facts = JSON.parse(field(p, "claim_facts_json"));
-  console.log(`  -> ${label}: ${field(p, "claim_verdict")} (${field(p, "claim_code")}) gdacs ${facts.alert ?? "?"} ${facts.severity ?? "?"} ${(facts.countries || []).join(",")} ${facts.from_date ?? ""}${facts.usgs_mag != null ? ` usgs M${facts.usgs_mag}` : ""}`);
-  return field(p, "claim_verdict");
+  const p = await read(C.donor1, "get_pool", [poolId]);
+  const row = { pool: poolId, event: `${type}:${id}`, label, verdict: field(p, "claim_verdict"), code: field(p, "claim_code"), why: field(p, "claim_why") };
+  rulings.push(row);
+  console.log(`  -> ${label}: ${row.verdict} (${row.code}) ${row.why}`);
+  return row.verdict;
 };
 
-// A: an M6.7 aftershock is below the M7 trigger, so the recipient dismisses it.
-await claim("recipient", R, "A  EQ 1474479 (M6.7 aftershock)", ids.myanmar, "EQ", "1474479");
-await write(R, "recipient", "resolve", [ids.myanmar]);
-// A: an M5.5 quake two weeks later is also below the trigger. Nobody dismisses it: a claim that
-// pays nothing cannot hold the pool, so the next trigger supersedes it immediately.
-await claim("donor-2", D2, "A  EQ 1477002 (M5.5)", ids.myanmar, "EQ", "1477002");
-// A: the M7.7 Mandalay earthquake qualifies. Releasing it before the contest window ends
-// needs donors holding more than half of the donations made before the claim.
-const a = await claim("recipient", R, "A  EQ 1474477 (M7.7 Mandalay)", ids.myanmar, "EQ", "1474477");
+// Invalid terms are refused and refunded: percents that do not add up, and a threshold for a hazard the pool does not cover.
+await write(C.donor1, "donor-1", "create_pool", ["Bad split", JSON.stringify([{ address: acct.reforest.address, percent: 60 }, { address: acct.wildlife.address, percent: 30 }]), "WF", MED, "Orange", "WF:10000", 0, "", GEN, "2026-06-01", "2027-12-31"], 2n * GEN);
+await write(C.donor1, "donor-1", "create_pool", ["Bad threshold", SPLIT, "EQ", "TUR", "Red", "WF:10000", 0, "", GEN, "2026-06-01", "2027-12-31"], 2n * GEN);
+
+// A: Mediterranean wildfire recovery. Orange or Red, at least 10,000 burned hectares, split 50/30/20.
+console.log("");
+await write(C.donor1, "donor-1", "create_pool", ["Mediterranean wildfire recovery", SPLIT, "WF", MED, "Orange", "WF:10000", 0, "", 6n * GEN, "2026-06-01", "2027-12-31"], 20n * GEN);
+await write(C.donor2, "donor-2", "donate", [ids.wildfire], 10n * GEN);
+await claim("wildlife", C.wildlife, "A  WF 1029958 Greece, 1,568 ha", ids.wildfire, "WF", "1029958");
+await write(C.wildlife, "wildlife", "resolve", [ids.wildfire]); // any recipient may dismiss a refusal early
+await claim("families", C.families, "A  WF 1029489 France, 2,280 ha", ids.wildfire, "WF", "1029489");
+await write(C.families, "families", "contest", [ids.wildfire]); // the recipients' side asks once for a fresh look
+await write(C.reforest, "reforest", "contest", [ids.wildfire], 0n, { expectError: true }); // ...once for the whole side
+await write(C.reforest, "reforest", "resolve", [ids.wildfire]);
+await claim("donor-2", C.donor2, "A  WF 1030534 Belgium", ids.wildfire, "WF", "1030534"); // not covered; superseded below
+const a = await claim("reforest", C.reforest, "A  WF 1030410 Spain, 19,294 ha", ids.wildfire, "WF", "1030410");
 if (a === "MEETS") {
-  await write(R, "recipient", "approve_release", [ids.myanmar], 0n, { expectError: true }); // no say in its own payout
-  await write(R, "recipient", "contest", [ids.myanmar], 0n, { expectError: true }); // nor a contest of it
-  await write(D2, "donor-2", "donate", [ids.myanmar], 20n * GEN); // a large donation after the claim...
-  await write(D2, "donor-2", "approve_release", [ids.myanmar]); // ...still counts only the 5 GEN given before: 5 of 15
-  await write(R, "recipient", "resolve", [ids.myanmar], 0n, { expectError: true }); // a minority cannot release it
-  await write(D1, "donor-1", "approve_release", [ids.myanmar]); // 15 of 15: released at once
+  await write(C.reforest, "reforest", "approve_release", [ids.wildfire], 0n, { expectError: true }); // recipients have no say
+  await write(C.donor2, "donor-2", "approve_release", [ids.wildfire]); // 10 of 30: not enough
+  await write(C.reforest, "reforest", "resolve", [ids.wildfire], 0n, { expectError: true });
+  await write(C.donor1, "donor-1", "approve_release", [ids.wildfire]); // 30 of 30: paid 3.0 / 1.8 / 1.2
 }
 
-// B: an earthquake does not match a hurricane pool; then Hurricane POLO-26 does. A donor contests,
-// which restarts the window; the re-assessment agrees and a donor majority releases it.
+// B: Myanmar earthquake response, M7+ with 1M+ exposed, Mandalay/Sagaing area, split 70/30.
 console.log("");
-await claim("donor-2", D2, "B  EQ 1474477 on a TC pool", ids.mexico, "EQ", "1474477");
-await write(R, "recipient", "resolve", [ids.mexico]);
-const b = await claim("recipient", R, "B  TC 1001325 (POLO-26)", ids.mexico, "TC", "1001325");
-await write(D2, "donor-2", "contest", [ids.mexico]);
-const bp = await read(D1, "get_pool", [ids.mexico]);
-console.log(`  -> contest: ${b} -> ${field(bp, "claim_verdict")}`);
-await write(D2, "donor-2", "contest", [ids.mexico], 0n, { expectError: true }); // donors contest once
-if (field(bp, "claim_verdict") === "MEETS") await write(D1, "donor-1", "approve_release", [ids.mexico]); // 5 of 8
+await write(C.donor1, "donor-1", "create_pool", ["Central Myanmar earthquake response", QUAKE_SPLIT, "EQ", "MMR", "Orange", "EQ:7", 1000000,
+  "The earthquake struck the Mandalay or Sagaing Region of central Myanmar.", 4n * GEN, "2025-01-01", "2026-12-31"], 8n * GEN);
+const b = await claim("responder", C.responder, "B  EQ 1474477 Mandalay M7.7", ids.quake, "EQ", "1474477");
+if (b === "MEETS") await write(C.donor1, "donor-1", "approve_release", [ids.quake]); // sole donor: paid 2.8 / 1.2
 
-// C: the facts pass every coded check but the area condition does not hold.
+// C: the same Spanish fires against a pool for mega-fires only (100,000 ha).
 console.log("");
-const c = await claim("recipient", R, "C  EQ 1474477 vs Rakhine terms", ids.rakhine, "EQ", "1474477");
-if (c !== "MEETS") {
-  await write(D1, "donor-1", "contest", [ids.rakhine], 0n, { expectError: true }); // only the recipient contests a refusal
-  await write(R, "recipient", "resolve", [ids.rakhine]); // the recipient may dismiss early
-}
-
-// D: a forward-looking DEMO pool for a Marmara/Istanbul earthquake (real use: money waits for a future disaster).
-console.log("");
-await write(D1, "donor-1", "create_pool", [
-  "DEMO · Istanbul / Marmara earthquake response", recipient.address, "EQ", "TUR", "Red", "7", 1000000,
-  "The earthquake struck the Marmara region of Türkiye, affecting Istanbul, Kocaeli, Sakarya, Yalova, Tekirdağ or Bursa province.",
-  5n * GEN, today, "2036-10-04",
-], 20n * GEN);
-await write(D2, "donor-2", "donate", [ids.istanbul], 10n * GEN);
-
-// E: a DEMO wildfire-recovery pool, tested on the July 2026 forest fires in France (47,910 ha).
-await write(D1, "donor-1", "create_pool", [
-  "DEMO · European wildfire recovery: reforestation and wildlife care", recipient.address, "WF", "ESP,FRA,GRC,ITA,PRT,TUR", "Red", "", 0, "",
-  3n * GEN, "2026-06-01", "2027-12-31",
-], 15n * GEN);
-await write(D2, "donor-2", "donate", [ids.wildfire], 5n * GEN);
-const e = await claim("donor-2", D2, "E  WF 1029628 (France, July 2026)", ids.wildfire, "WF", "1029628");
-if (e === "MEETS") await write(D1, "donor-1", "approve_release", [ids.wildfire]); // 15 of 20
+await write(C.donor2, "donor-2", "create_pool", ["Mega-fire reserve", SPLIT, "WF", MED, "Orange", "WF:100000", 0, "", 5n * GEN, "2026-06-01", "2027-12-31"], 10n * GEN);
+await claim("reforest", C.reforest, "C  WF 1029643 Spain, 66,098 ha vs 100,000", ids.megafire, "WF", "1029643");
+await write(C.reforest, "reforest", "resolve", [ids.megafire]);
 
 await sleep(5000);
-const end = { d1: await balance(donor1.address), d2: await balance(donor2.address), r: await balance(recipient.address) };
 console.log("\nfinal pools:");
 for (const [k, id] of Object.entries(ids)) {
-  const p = await read(D1, "get_pool", [id]);
-  console.log(`  ${id} ${k.padEnd(8)} state=${field(p, "state").padEnd(7)} balance=${fmt(field(p, "balance")).padStart(6)} paid=${fmt(field(p, "total_paid"))} events=${field(p, "paid_events_json")}`);
+  const p = await read(C.donor1, "get_pool", [id]);
+  console.log(`  ${id} ${k.padEnd(8)} state=${field(p, "state").padEnd(7)} balance=${fmt(field(p, "balance")).padStart(6)} paid=${fmt(field(p, "total_paid"))} events=${field(p, "paid_events_json")} thresholds=${field(p, "thresholds_json")}`);
 }
-console.log(`  was_paid(${ids.myanmar}, EQ, 1474477) = ${await read(D1, "was_paid", [ids.myanmar, "EQ", "1474477"])}`);
-console.log(`  was_paid(${ids.myanmar}, EQ, 1474479) = ${await read(D1, "was_paid", [ids.myanmar, "EQ", "1474479"])}`);
-console.log(`\nbalances: donor-1 ${fmt(start.d1)} -> ${fmt(end.d1)}, donor-2 ${fmt(start.d2)} -> ${fmt(end.d2)}, recipient ${fmt(start.r)} -> ${fmt(end.r)} GEN`);
+const end = Object.fromEntries(await Promise.all(Object.entries(acct).map(async ([k, a]) => [k, await balance(a.address)])));
+console.log(`\nbalances: ${Object.keys(acct).map((k) => `${k} ${fmt(start[k])} -> ${fmt(end[k])}`).join(", ")} GEN`);
 console.log("(transfers are emitted on finalization, so balances catch up once the appeal window closes)");
-console.log(`\nto close ${ids.mexico} after ${today}: node scripts/demo.mjs ${CONTRACT} close ${ids.mexico} <donor-1 key> <donor-2 key>`);
-const out = { contract: CONTRACT, donor1: donor1.address, donor2: donor2.address, recipient: recipient.address, ids, log };
-console.log("\nJSON:", JSON.stringify(out));
+const out = { contract: CONTRACT, accounts: Object.fromEntries(Object.entries(acct).map(([k, a]) => [k, a.address])), ids, rulings, log };
+writeFileSync(new URL("../docs/demo-run.json", import.meta.url), JSON.stringify(out, null, 2));
+console.log("\nwrote docs/demo-run.json");

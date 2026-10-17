@@ -7,6 +7,7 @@ import { usePickedEvent } from "@/lib/hooks/usePickedEvent";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useNow } from "@/lib/hooks/useNow";
 import {
+  isRecipient,
   CONTEST_WINDOW_SECONDS,
   HAZARDS,
   approvalPercent,
@@ -48,7 +49,7 @@ export function PoolActions({ pool }: { pool: Pool }) {
   }
 
   const donor = isDonor(pool, address);
-  const recipient = sameAddress(address, pool.recipient);
+  const recipient = isRecipient(pool, address);
   const ended = coverageEnded(pool);
   const windowLeft = Math.max(0, CONTEST_WINDOW_SECONDS - secondsSince(pool.claim_at));
   const windowOpen = pool.state === "pending" && windowLeft > 0;
@@ -122,7 +123,7 @@ export function PoolActions({ pool }: { pool: Pool }) {
             {pool.claim_contested ? " (restarted by a contest)" : ""}.{" "}
             {meets
               ? "Donors who gave before this claim can contest it once, or release it early with a majority of their donations."
-              : "The recipient can contest it once or dismiss it early."}
+              : "A recipient can contest it once or dismiss it early."}
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">The contest window has passed. Anyone can resolve the claim.</p>
@@ -152,7 +153,7 @@ export function PoolActions({ pool }: { pool: Pool }) {
         </div>
         {meets && windowOpen && myWeight === 0n && donor && (
           <p className="text-xs text-muted-foreground">
-            {recipient ? "As the recipient you have no say in releasing your own payout." : "Your donation came after this claim was opened, so it gives no say in this claim."}
+            {recipient ? "As a recipient you have no say in releasing your own payout." : "Your donation came after this claim was opened, so it gives no say in this claim."}
           </p>
         )}
         {approved && windowOpen && <p className="text-xs text-green-400">You approved this release.</p>}

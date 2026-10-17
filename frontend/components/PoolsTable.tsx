@@ -10,6 +10,9 @@ import {
   formatGen,
   gdacsUrl,
   parseJson,
+  recipientsOf,
+  thresholdText,
+  thresholdsOf,
   wei,
   type ClaimFacts,
   type HistoryEntry,
@@ -130,11 +133,29 @@ function lastClaim(pool: Pool, history: HistoryEntry[]) {
   return { verdict: (h.event === "paid" ? "MEETS" : (h.verdict as string)) as Pool["claim_verdict"], key: String(h.event_key ?? "") };
 }
 
-function severityText(min: string, hazards: string[]) {
-  const parts = [];
-  if (hazards.includes("EQ")) parts.push(`earthquakes ≥ M${min}, GDACS and USGS within 0.3`);
-  if (hazards.includes("TC")) parts.push(`cyclones ≥ ${min} km/h wind`);
-  return parts.join("; ");
+const THRESHOLD_NOUN: Record<string, string> = { EQ: "earthquakes", TC: "cyclones", WF: "wildfires" };
+
+function thresholdsText(pool: Pool) {
+  return Object.entries(thresholdsOf(pool))
+    .map(([h, v]) => `${THRESHOLD_NOUN[h] ?? h} ≥ ${thresholdText(h, v)}${h === "EQ" ? " (GDACS and USGS within 0.3)" : h === "WF" ? " burned" : " wind"}`)
+    .join("; ");
+}
+
+/** Who a payout goes to, and in what shares. */
+export function SplitList({ pool }: { pool: Pool }) {
+  const amount = wei(pool.payout);
+  return (
+    <ul className="space-y-0.5">
+      {recipientsOf(pool).map((r, i) => (
+        <li key={r.address} className="flex flex-wrap items-center gap-x-2">
+          <span className="font-semibold text-accent w-10">{r.percent}%</span>
+          <span>{r.label || `Recipient ${i + 1}`}</span>
+          <AddressDisplay address={r.address} />
+          <span className="text-muted-foreground">({formatGen((amount * BigInt(r.percent)) / 100n)} GEN per event)</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Terms({ pool }: { pool: Pool }) {
@@ -147,10 +168,11 @@ function Terms({ pool }: { pool: Pool }) {
       {row("Hazards", hazards.map((h) => HAZARD_LABEL[h] ?? h).join(", "))}
       {row("Countries", pool.countries.replaceAll(",", ", "))}
       {row("GDACS alert", <span className={ALERT_STYLE[pool.min_alert]}>{pool.min_alert.toLowerCase()} or higher</span>)}
-      {pool.min_severity && (hazards.includes("EQ") || hazards.includes("TC")) && row("Severity", severityText(pool.min_severity, hazards))}
+      {Object.keys(thresholdsOf(pool)).length > 0 && row("Thresholds", thresholdsText(pool))}
       {wei(pool.min_exposed) > 0n && row("Exposed people", `≥ ${Number(wei(pool.min_exposed)).toLocaleString("en-US")} in MMI VII+ shaking (earthquakes)`)}
       {row("Event dates", `${pool.coverage_start} → ${pool.coverage_end}`)}
-      {row("Payout", `${formatGen(pool.payout)} GEN per qualifying event`)}
+      {row("Payout", `${formatGen(pool.payout)} GEN per qualifying event, split:`)}
+      <div className="sm:pl-[7.5rem]"><SplitList pool={pool} /></div>
       {pool.area_terms && row("Area (LLM)", <em>&quot;{pool.area_terms}&quot;</em>)}
     </dl>
   );
@@ -213,7 +235,6 @@ function PoolRow({ pool }: { pool: Pool }) {
                   <Terms pool={pool} />
                 </div>
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p>Recipient: <AddressDisplay address={pool.recipient} /></p>
                   <p>Created by: <AddressDisplay address={pool.creator} /> · {parseJson<string[]>(pool.donors_json, []).length} donor(s) · {formatGen(pool.total_donated)} GEN donated</p>
                   {paid.length > 0 && <p>Paid events: {paid.map((k) => <a key={k} href={gdacsUrl(k.split(":")[0], k.split(":")[1])} target="_blank" rel="noopener noreferrer" className="font-mono hover:text-accent mr-2">{k}</a>)}</p>}
                 </div>
@@ -224,10 +245,10 @@ function PoolRow({ pool }: { pool: Pool }) {
                       <a href={gdacsUrl(ctype, cid)} target="_blank" rel="noopener noreferrer" className="font-mono inline-flex items-center gap-1 hover:text-accent">{pool.claim_event} <ExternalLink className="w-3 h-3" /></a>
                       <VerdictBadge verdict={pool.claim_verdict} />
                     </p>
-                    <p className="text-muted-foreground">Why: {CODE_TEXT[pool.claim_code] ?? pool.claim_code}</p>
+                    <p><span className="font-semibold">Why: </span>{pool.claim_why || CODE_TEXT[pool.claim_code] || pool.claim_code}</p>
                     <p className="text-muted-foreground">
                       What validators read: {HAZARD_LABEL[facts.hazard ?? ""] ?? facts.hazard} · {(facts.countries ?? []).join(", ") || "no country"} · alert {facts.alert || "?"} · {facts.from_date || "no date"}
-                      {facts.severity != null && <> · severity {facts.severity}</>}
+                      {facts.severity != null && <> · {facts.hazard === "EQ" || facts.hazard === "TC" || facts.hazard === "WF" ? thresholdText(facts.hazard, facts.severity) : `severity ${facts.severity}`}</>}
                       {facts.usgs_mag != null && <> · USGS M{facts.usgs_mag}</>}
                       {facts.exposed != null && <> · {Number(facts.exposed).toLocaleString("en-US")} exposed</>}
                     </p>
@@ -248,6 +269,10 @@ function PoolRow({ pool }: { pool: Pool }) {
                       {h.event === "contested" && <> · by {String(h.by)}, was {String(h.before)}</>}
                       {h.amount ? <> · {formatGen(h.amount as string)} GEN</> : null}
                       {h.event === "closed" && <> · {formatGen(h.remaining as string)} GEN left for donors</>}
+                      {Array.isArray(h.split) && (
+                        <> · split {(h.split as [string, string][]).map(([a, v]) => `${formatGen(v)} to ${a}…`).join(", ")}</>
+                      )}
+                      {typeof h.why === "string" && h.why && <span className="block text-muted-foreground pl-4">{h.why}</span>}
                     </li>
                   ))}
                 </ol>

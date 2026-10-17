@@ -21,15 +21,16 @@ export default function HomePage() {
               <h1 className="text-3xl md:text-4xl xl:text-5xl font-bold leading-tight">Fund before the disaster. Pay when it is confirmed.</h1>
               <p className="text-base md:text-lg text-muted-foreground">
                 Relief money arrives weeks late because someone has to decide the disaster happened. Here donors decide in advance: they
-                pre-fund a responder and write the trigger. When a GDACS alert matches, GenLayer validators confirm it against GDACS and
-                USGS themselves and the payout goes straight to the responder&apos;s wallet.
+                pre-fund the responders and write the trigger: a magnitude, a wind speed or a burned area in hectares. When a GDACS alert
+                matches, GenLayer validators confirm it against GDACS and USGS themselves, record why in plain words, and the payout is
+                split straight into the recipients&apos; wallets (for example reforestation, wildlife care and displaced families).
               </p>
               <ol className="grid grid-cols-2 gap-2 text-xs">
                 {[
                   { icon: Coins, t: "1. Fund", d: "terms fixed up front" },
                   { icon: Radio, t: "2. Alert", d: "GDACS reports an event" },
                   { icon: ShieldCheck, t: "3. Verify", d: "GDACS + USGS, in code" },
-                  { icon: Send, t: "4. Pay", d: "straight to the wallet" },
+                  { icon: Send, t: "4. Pay", d: "split between wallets" },
                 ].map(({ icon: Icon, t, d }) => (
                   <li key={t} className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
                     <Icon className="w-4 h-4 text-accent shrink-0" />
@@ -64,11 +65,11 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-muted-foreground">
               <div className="space-y-2">
                 <div className="text-accent font-bold text-lg">1. Pre-fund</div>
-                <p>A donor names the responder&apos;s wallet and fixes the terms: hazards, countries, minimum GDACS alert, severity, people exposed, dates and an optional area condition. Anyone can add GEN to an open pool.</p>
+                <p>A donor names up to five recipient wallets with their shares and fixes the terms: hazards, countries, minimum GDACS alert, a threshold per hazard (earthquake magnitude, cyclone wind, wildfire hectares), people exposed, dates and an optional area condition. Anyone can add GEN to an open pool.</p>
               </div>
               <div className="space-y-2">
                 <div className="text-accent font-bold text-lg">2. Trigger</div>
-                <p>Anyone submits a GDACS event id. Every validator fetches the event from GDACS, and for earthquakes cross-checks the magnitude with USGS. Hazard, country, alert, dates, severity and exposure are decided in code.</p>
+                <p>Anyone submits a GDACS event id. Every validator fetches the event from GDACS, and for earthquakes cross-checks the magnitude with USGS. Hazard, country, alert, dates, thresholds and exposure are decided in code, and every ruling stores a plain-English reason.</p>
               </div>
               <div className="space-y-2">
                 <div className="text-accent font-bold text-lg">3. Judge the area</div>
@@ -76,7 +77,7 @@ export default function HomePage() {
               </div>
               <div className="space-y-2">
                 <div className="text-accent font-bold text-lg">4. Pay or return</div>
-                <p>For 10 minutes a donor or the recipient can ask once for a re-assessment. Then the payout goes to the responder; each event pays a pool once. After coverage ends, donors reclaim what is left pro-rata.</p>
+                <p>For 10 minutes the side a ruling goes against (donors for a payout, the recipients otherwise) can ask once for a re-assessment. Then the payout is split between the recipients by their shares; each event pays a pool once. After coverage ends, donors reclaim what is left pro-rata.</p>
               </div>
             </div>
           </section>

@@ -11,30 +11,64 @@ big enough, then approve a transfer, and local responders wait days or weeks in 
 Anticipatory-action programmes (the Red Cross DREF, the UN CERF, parametric insurance) fix this by agreeing the trigger
 *in advance*. ReliefTrigger makes that trigger a contract anyone can fund:
 
-1. A **donor** names the responder's wallet (an NGO, a local partner) and fixes the terms: which hazards, which countries
-   (ISO3), the minimum GDACS alert level, a minimum magnitude or wind speed, a minimum number of people exposed to strong
-   shaking, the dates covered and, optionally, a plain-language **area condition**. Anyone can add GEN to the pool.
+1. A **donor** names up to five **recipient wallets with their shares** (for a wildfire: reforestation 50%, wildlife care
+   30%, displaced families 20%) and fixes the terms: which hazards, which countries (ISO3), the minimum GDACS alert level,
+   a **threshold per hazard** (earthquake magnitude, cyclone wind in km/h, **wildfire burned area in hectares**), a minimum
+   number of people exposed to strong shaking, the dates covered and, optionally, a plain-language **area condition**.
+   Anyone can add GEN to the pool.
 2. When something happens, **anyone triggers** the pool with a GDACS event id.
 3. **Every GenLayer validator** fetches that event from GDACS itself and, for earthquakes, cross-checks the magnitude with
    USGS. Every countable term is decided in code. Only if all of them pass, and the pool has an area condition, do the
-   validators' LLMs judge the area.
+   validators' LLMs judge the area. Every ruling is stored with a **plain-English reason** built from the facts the
+   validators agreed on.
 4. For 10 minutes the side the ruling goes against can ask once for an independent re-assessment: donors who gave
-   before the claim if it pays, the recipient if it does not. Paying out before the window ends needs approval from
+   before the claim if it pays, the recipients if it does not. Paying out before the window ends needs approval from
    donors holding more than half of the donations made before the claim.
-5. The payout goes **straight to the responder's wallet**. Each event pays a pool once. When coverage ends, donors
-   reclaim what is left, pro-rata.
+5. The payout is **split straight into the recipients' wallets** by their shares. Each event pays a pool once. When
+   coverage ends, donors reclaim what is left, pro-rata.
 
 A donor dashboard, an auditor or another contract calls `was_paid(pool_id, type, event_id)` to see which disasters a
 pool funded, without trusting any single party's report.
 
 **Live app:** [relieftrigger-bars26.vercel.app](https://relieftrigger-bars26.vercel.app). Reads need no wallet. Writes need
 MetaMask on GenLayer Studio (chain 61999); the **Test GEN** button funds your wallet from the Studio faucet.
-**Contract:** [`0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab`](https://explorer-studio.genlayer.com/address/0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab) on GenLayer Studio.
+**Contract (v3):** [`0xfEBd2511628E02cE38764c8dF657058A7f40AA84`](https://explorer-studio.genlayer.com/address/0xfEBd2511628E02cE38764c8dF657058A7f40AA84) on GenLayer Studio.
+The v2 contract [`0xe4748A37…3DE4Ab`](https://explorer-studio.genlayer.com/address/0xe4748A37243C79A7e72B1423E4DcDDb69f3DE4Ab)
+and its run ([`docs/REPRODUCTION-v2.md`](docs/REPRODUCTION-v2.md)) stay as the record of the accepted project.
 
-## Verified live, on real disasters
+## v3 (milestone): wildfire hectares, split payouts, explained rulings
 
-`scripts/demo.mjs` ran five pools against real GDACS events with real validator consensus and real LLM calls. Every
-transaction hash is in [`docs/REPRODUCTION.md`](docs/REPRODUCTION.md).
+| What changed | Before (v2) | Now (v3) |
+|---|---|---|
+| Thresholds | one `min_severity` for EQ or TC only; a pool covering both could not set different numbers | `thresholds` per hazard: `EQ:7, TC:180, WF:10000`. **Wildfires are judged by burned hectares** (GDACS severity unit `ha`), so a donor can fund "fires of 10,000 ha or more" instead of every Orange alert |
+| Who is paid | one recipient wallet | up to **five recipients with whole-percent shares** that add up to 100; each payout is split in integer arithmetic and the first recipient takes the rounding remainder |
+| Governance with several recipients | the recipient was excluded from donor say and owned the refusal contest | **every** recipient is excluded from the claim snapshot; any recipient may contest a refusal, but the recipients' side contests **once** in total; any recipient may dismiss early |
+| Why a ruling went the way it did | a reason code (`severity`, `country`, …) | a stored sentence built only from agreed facts, e.g. *"WF 1029958: GDACS ORANGE alert in GRC, starting 2026-07-30, 1,568 ha. The pool's burned area (ha) threshold is 10,000 ha."*; it is kept in the pool history after the claim is paid or dismissed |
+| Tests | 48 | 69 (thresholds, hectares, splits and rounding, multi-recipient governance, every reason sentence) |
+
+### v3 verified live, on real fires and a real earthquake
+
+`scripts/demo.mjs` ran three pools against real GDACS events with real validator consensus and LLM calls. Every
+transaction hash and the reason stored with each ruling are in [`docs/REPRODUCTION.md`](docs/REPRODUCTION.md).
+
+| Pool and terms | GDACS event (real) | Ruling and stored reason | What happened |
+|---|---|---|---|
+| Mediterranean wildfire recovery: WF, six countries, Orange+, **≥ 10,000 ha**, split 50 / 30 / 20 | WF 1029958, Greece | Does not meet: *"…1,568 ha. The pool's burned area (ha) threshold is 10,000 ha."* | dismissed early by the **wildlife** recipient |
+| same | WF 1029489, France | Does not meet: *"…2,280 ha…"* | the **families** recipient contested (same ruling); the **reforestation** recipient's second contest was refused, then it dismissed |
+| same | WF 1030534, Belgium | Does not meet: *"…This pool covers ESP,FRA,GRC,ITA,PRT,TUR only."* | superseded by the next trigger |
+| same | WF 1030410, Spain | **Meets**: *"…19,294 ha (threshold 10,000 ha). Every coded term is met."* | a recipient's approval refused, a 10-of-30 donor approval could not release it; 30 of 30 did → **3.00 / 1.80 / 1.20 GEN** to reforestation, wildlife care, families |
+| Central Myanmar: EQ, **M ≥ 7**, ≥ 1M exposed, area, split 70 / 30 | EQ 1474477, Mandalay M7.7 | **Meets**: *"…M7.7 (threshold M7), USGS M7.7 agrees. Every coded term is met; validators judged that the event did strike the area…"* | sole donor approved → **2.80 / 1.20 GEN** to search and rescue, emergency shelter |
+| Mega-fire reserve: WF, **≥ 100,000 ha** | WF 1029643, Spain | Does not meet: *"…66,098 ha. The pool's burned area (ha) threshold is 100,000 ha."* | dismissed |
+
+Also refused and refunded on-chain: a pool whose shares add up to 90%, and a `WF` threshold on an earthquake-only pool.
+Final wallet balances match the splits exactly (reforestation 1 → 4.00, wildlife 1 → 2.80, families 1 → 2.20,
+search and rescue 1 → 3.80, shelter 1 → 2.20 GEN).
+
+
+## v2 run, on real disasters
+
+The v2 deployment's `scripts/demo.mjs` ran five pools against real GDACS events with real validator consensus and real LLM calls. Every
+transaction hash is in [`docs/REPRODUCTION-v2.md`](docs/REPRODUCTION-v2.md).
 
 | Pool and terms | GDACS event (real) | Validators read | Verdict | Outcome |
 |---|---|---|---|---|
@@ -79,16 +113,17 @@ Each validator runs the same function inside `gl.eq_principle.strict_eq`:
 
 | Rule | Why |
 |---|---|
-| Terms are fixed at creation; the recipient is fixed too | Donors know exactly what their GEN can pay for and to whom |
+| Terms are fixed at creation; the recipients and their shares are fixed too | Donors know exactly what their GEN can pay for, to whom and in what proportion |
 | Pool ≥ 1 GEN, donation ≥ 0.1 GEN, payout ≤ initial funding | No dust pools; a pool can always pay at least once |
 | Triggering is permissionless | Nobody can sit on a qualifying disaster |
 | One pending claim per pool; a pending claim that does not meet the terms is replaced by the next trigger (logged as superseded), a pending `MEETS` claim is not | No races for the same balance, and nobody can park irrelevant events on a pool to delay a real disaster |
 | Each GDACS event pays a pool at most once (`paid_events`) | Re-triggering the same disaster cannot drain the pool |
-| The say in a claim is snapshotted when it is triggered: each donor's GEN given **before** the claim; the recipient's own donations never count | Nobody can buy a vote in a claim that is already open, and the beneficiary has no say in its own payout |
+| The say in a claim is snapshotted when it is triggered: each donor's GEN given **before** the claim; no recipient's own donations ever count | Nobody can buy a vote in a claim that is already open, and no beneficiary has a say in its own payout |
 | Releasing a `MEETS` payout before the contest window ends needs `approve_release` from donors holding **more than half** of that snapshot | A single or minority donor cannot pay out on behalf of everyone else |
-| Contests belong to the side a ruling goes against: donors (pre-claim) contest a payout, the recipient contests anything else; each side once per claim | The beneficiary cannot spend the only contest on a ruling that already favours it |
+| Contests belong to the side a ruling goes against: donors (pre-claim) contest a payout, the recipients contest anything else; each side once per claim, however many wallets it has | No beneficiary can spend the only contest on a ruling that already favours it, and several recipients cannot contest one after another |
 | Every contest restarts the 10-minute window and clears approvals | A contest can never be used to skip straight to settlement; the other side can always answer a changed ruling |
-| Only the recipient can dismiss a non-paying claim early; after the window anyone resolves | Dismissal only costs the recipient, and a claim can never be stuck |
+| Only a recipient can dismiss a non-paying claim early; after the window anyone resolves | Dismissal only costs the recipients, and a claim can never be stuck |
+| Payout split: `amount × percent ÷ 100` each, remainder to the first recipient | Shares are exact, sum to the payout, and no wei stays in the contract |
 | Payout = min(payout, balance), integer arithmetic | No model decides an amount |
 | After coverage ends anyone closes; each donor reclaims `contribution × closing_balance ÷ total_donated`, once, and the last donor also takes the rounding remainder | Unspent money goes back in proportion; nobody can take more than their share and no wei is left stranded |
 
@@ -116,20 +151,22 @@ way, and the app reads that return value and tells the user the GEN is on its wa
 
 | Method | Kind | What it does |
 |---|---|---|
-| `create_pool(name, recipient, hazards, countries, min_alert, min_severity, min_exposed, area_terms, payout, coverage_start, coverage_end)` | payable write | Fund a pool (≥ 1 GEN). Returns the pool id or `REFUNDED: …` |
+| `create_pool(name, recipients, hazards, countries, min_alert, thresholds, min_exposed, area_terms, payout, coverage_start, coverage_end)` | payable write | Fund a pool (≥ 1 GEN). Returns the pool id or `REFUNDED: …` |
 | `donate(pool_id)` | payable write | Add ≥ 0.1 GEN to a pool that has not ended. Returns `donated` or `REFUNDED: …` |
 | `trigger(pool_id, event_type, event_id)` | write | Consensus assessment of a GDACS event; returns the verdict. Replaces a pending claim that does not meet the terms |
 | `approve_release(pool_id)` | write | A pre-claim donor approves an early payout of a `MEETS` claim; releases it once approvals exceed half of the snapshot. Returns `approved` or `paid` |
 | `contest(pool_id)` | write | The side the ruling goes against, once per side, within the window: independent re-assessment that restarts the window |
-| `resolve(pool_id)` | write | After the window, anyone: pays the recipient on `MEETS`, otherwise dismisses. Before it, only the recipient can dismiss |
+| `resolve(pool_id)` | write | After the window, anyone: splits the payout between the recipients on `MEETS`, otherwise dismisses. Before it, only a recipient can dismiss |
 | `close(pool_id)` | write | After coverage ends, freezes the remaining balance for reclaims |
 | `reclaim(pool_id)` | write | A donor's pro-rata share of what was not paid out; returns the amount |
 | `get_pools(offset, limit)` | view | Up to 200 pools in **one** call: the whole registry with one request |
 | `get_pool`, `list_pools`, `get_contribution`, `claim_weight`, `was_paid`, `get_history`, `contest_window_seconds` | views | |
 
-`hazards` are GDACS codes (`EQ`, `TC`, `FL`, `VO`, `DR`, `WF`); `min_severity` is an earthquake magnitude or a cyclone's
-wind speed in km/h and applies to `EQ` and `TC` events (use separate pools if you need both with different thresholds);
-`min_exposed` applies to earthquakes.
+`hazards` are GDACS codes (`EQ`, `TC`, `FL`, `VO`, `DR`, `WF`); `recipients` is a JSON list of up to five
+`{"address", "percent", "label"}` whose percents add up to 100. `thresholds` is optional, e.g. `EQ:7, WF:10000`: earthquake
+magnitude (cross-checked with USGS), cyclone wind in km/h, wildfire burned area in hectares, each only for a hazard the
+pool covers. `min_exposed` applies to earthquakes. The current ruling's reason is `claim_why` on the pool, and every paid
+or dismissed claim keeps its reason in `get_history`.
 
 ## Frontend
 
@@ -172,18 +209,23 @@ would prompt the wallet again.
 
 ## Tests
 
-48 direct-mode tests (`tests/direct/test_relief_trigger.py`) with mocked GDACS and USGS responses: pool creation and ten
+69 direct-mode tests (`tests/direct/test_relief_trigger.py`) with mocked GDACS and USGS responses: pool creation and ten
 kinds of invalid terms (all refunded, nothing stored), the minimum pool and donation, each coded term failing on its own
 while the model would have said `MEETS`, unreachable GDACS or USGS → `UNCLEAR`, GDACS/USGS disagreement, all three area
 verdicts, the non-enum LLM guard, input validation, a pending qualifying claim blocking new triggers while a failing one
 is superseded, duplicate events, the payout cap, close before and after coverage, pro-rata reclaim, the rounding
-remainder, reclaim once, `get_pools`, and the views.
+remainder, reclaim once, `get_pools`, and the views. v3 adds per-hazard thresholds and their validation, the
+wildfire hectare threshold (19,294 ha meets 10,000; 9,999 and 1,568 do not; no threshold ignores the area), a 50/30/20
+split of an odd amount with the remainder to the first recipient, six kinds of invalid recipient lists, and the reason
+sentence of every ruling type.
 
 Adversarial governance tests, each trying to bypass the protections:
 
 - a **minority donor** approves and tries to resolve early: refused until donors with a majority approve;
 - a **latecomer** donates 100 GEN while a claim is pending: no say, cannot approve, contest or resolve early;
 - the **recipient** donates 50 GEN before the claim: excluded from the snapshot, cannot approve or contest its own payout;
+- with two recipients, the **second** recipient donates 50 GEN before the claim: also excluded, no approval, no contest;
+- one recipient contests a refusal: the other recipient cannot contest it again (one contest per side), but may dismiss;
 - the recipient contests a non-paying claim into a payout: the window restarts, nobody can resolve early, the recipient
   cannot contest again, and the donors can still contest it back;
 - donors contest once only, and a contest clears earlier approvals;
@@ -221,6 +263,8 @@ Deploy your own with `genlayer network set studionet && genlayer deploy --contra
   the first hours, so triggering very early can give `DOES_NOT_MEET` where a later trigger would give `MEETS`. A failed
   claim is dismissed and the event can be triggered again.
 - Earthquake exposure (`shakepop`) is a GDACS estimate.
+- GDACS reports a wildfire's burned area as an estimate that can grow while the fire burns; a fire triggered early may be
+  under the threshold and pass it later. A failed claim is dismissed and the event can be triggered again.
 - This runs on GenLayer Studio with test GEN. Recipient wallets are whatever the donor enters; ReliefTrigger does not vet
   responders.
 

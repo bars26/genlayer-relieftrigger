@@ -4,7 +4,7 @@ import { useState } from "react";
 import { User, LogOut, AlertCircle, ExternalLink } from "lucide-react";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { useAllPools } from "@/lib/hooks/useReliefTrigger";
-import { isDonor, sameAddress } from "@/lib/contracts/types";
+import { isDonor, isRecipient } from "@/lib/contracts/types";
 import { success, error, userRejected } from "@/lib/utils/toast";
 import { AddressDisplay } from "./AddressDisplay";
 import { Button } from "./ui/button";
@@ -34,7 +34,7 @@ export function AccountPanel() {
 
   const { pools } = useAllPools();
   const donatedCount = pools.filter((p) => isDonor(p, address)).length;
-  const recipientCount = pools.filter((p) => sameAddress(p.recipient, address)).length;
+  const recipientCount = pools.filter((p) => isRecipient(p, address)).length;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [connectionError, setConnectionError] = useState("");

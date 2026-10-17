@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import ReliefTrigger, { type CreatePoolInput, type TxProgress, type TxResult } from "../contracts/ReliefTrigger";
-import { claimWeight, hasApproved, sameAddress, type GdacsEvent, type Pool } from "../contracts/types";
+import { claimWeight, hasApproved, isRecipient, type GdacsEvent, type Pool } from "../contracts/types";
 import { getContractAddress, getStudioUrl } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { ReliefError, classifyError } from "../utils/errors";
@@ -207,7 +207,7 @@ export function usePoolWrite() {
           case "contest": {
             if (fresh!.state !== "pending") refuse("There is no pending claim to contest.");
             const meets = fresh!.claim_verdict === "MEETS";
-            if (meets ? fresh!.donor_contested || claimWeight(fresh!, address) === 0n : fresh!.recipient_contested || !sameAddress(fresh!.recipient, address))
+            if (meets ? fresh!.donor_contested || claimWeight(fresh!, address) === 0n : fresh!.recipient_contested || !isRecipient(fresh!, address))
               refuse("You cannot contest this claim (already contested, or the ruling does not go against you).");
             result = await contract.contest(vars.id, onProgress);
             note = `Re-assessed: ${String(result.returned)}. The contest window restarted.`;
@@ -216,7 +216,7 @@ export function usePoolWrite() {
           case "resolve":
             if (fresh!.state !== "pending") refuse("There is no pending claim to resolve.");
             result = await contract.resolve(vars.id, onProgress);
-            note = result.returned === "paid" ? "Payout sent to the recipient." : "Claim dismissed; the pool stays funded.";
+            note = result.returned === "paid" ? "Payout split between the recipients." : "Claim dismissed; the pool stays funded.";
             break;
           case "close":
             if (fresh!.state !== "open") refuse(`This pool is ${fresh!.state}; it cannot be closed now.`);
